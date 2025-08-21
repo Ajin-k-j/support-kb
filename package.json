@@ -9,19 +9,36 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@firebase/app": "^0.14.1",
+    "@firebase/auth": "^1.11.0",
+    "@firebase/firestore": "^4.9.0",
+    "@hookform/resolvers": "^3.9.0",
+    "@tiptap/extension-blockquote": "^3.2.1",
+    "@tiptap/extension-bold": "^3.2.1",
+    "@tiptap/extension-bullet-list": "^3.2.1",
+    "@tiptap/extension-italic": "^3.2.1",
+    "@tiptap/extension-list-item": "^3.2.1",
+    "@tiptap/extension-ordered-list": "^3.2.1",
+    "@tiptap/react": "^3.2.1",
+    "@tiptap/starter-kit": "^3.2.1",
+    "bootstrap": "^5.3.3",
+    "firebase": "^12.1.0",
+    "lucide-react": "^0.540.0",
+    "next": "15.5.0",
     "react": "19.1.0",
     "react-dom": "19.1.0",
-    "next": "15.5.0"
+    "react-hook-form": "^7.53.0",
+    "tiptap": "^1.32.2",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
+    "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
+    "@types/node": "^20.19.11",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "15.5.0",
-    "@eslint/eslintrc": "^3"
+    "typescript": "^5"
   }
 }
