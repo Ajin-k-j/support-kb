@@ -1,5 +1,5 @@
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, Unsubscribe } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, Unsubscribe, addDoc, updateDoc } from 'firebase/firestore';
 import { TicketData } from '@/types';
 
 export function listenToUserTickets(userId: string, callback: (tickets: TicketData[]) => void): Unsubscribe {
@@ -8,10 +8,37 @@ export function listenToUserTickets(userId: string, callback: (tickets: TicketDa
   return onSnapshot(q, (snapshot) => {
     const tickets: TicketData[] = [];
     snapshot.forEach((doc) => {
-      tickets.push({ id: doc.id, ...doc.data() } as TicketData);
+      const data = doc.data();
+      tickets.push({
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt || new Date().toISOString(),
+        lastModified: data.lastModified || new Date().toISOString(),
+      } as TicketData);
     });
     callback(tickets);
   }, (error) => {
     console.error('Error fetching tickets:', error);
   });
+}
+
+export async function createTicket(ticket: Omit<TicketData, 'id' | 'createdAt' | 'lastModified'>): Promise<string> {
+  const now = new Date().toISOString();
+  const ticketData = {
+    ...ticket,
+    createdAt: now,
+    lastModified: now,
+  };
+  const docRef = await addDoc(collection(db, 'ticketResolutions'), ticketData);
+  return docRef.id;
+}
+
+export async function updateTicket(id: string, ticket: Partial<TicketData>): Promise<void> {
+  const now = new Date().toISOString();
+  const ticketData = {
+    ...ticket,
+    lastModified: now,
+  };
+  const docRef = doc(db, 'ticketResolutions', id);
+  await updateDoc(docRef, ticketData);
 }

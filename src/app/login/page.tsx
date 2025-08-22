@@ -9,6 +9,7 @@ import { auth } from '@/lib/firebase';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import Loader from '@/components/Loader';
 
 const loginSchema = z.object({
   email: z.string().email('Invalid email address'),
@@ -31,7 +32,7 @@ export default function Login() {
     }
   }, [user, loading, router]);
 
-  if (loading) return <div className="text-center py-5">Loading...</div>;
+  if (loading) return <div className="text-center py-5"><Loader /></div>;
   if (user) return null;
 
   const onSubmit = async (data: LoginForm) => {
@@ -40,46 +41,61 @@ export default function Login() {
       await signInWithEmailAndPassword(auth, data.email, data.password);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message);
+      let friendlyMessage = 'An unexpected error occurred.';
+      switch (err.code) {
+        case 'auth/user-not-found':
+          friendlyMessage = 'No account found with this email.';
+          break;
+        case 'auth/wrong-password':
+          friendlyMessage = 'Incorrect password.';
+          break;
+        case 'auth/invalid-email':
+          friendlyMessage = 'Please enter a valid email address.';
+          break;
+        default:
+          friendlyMessage = err.message;
+      }
+      setError(friendlyMessage);
     }
   };
 
   return (
-    <div className="container">
-      <div className="row justify-content-center">
-        <div className="col-md-6">
-          <div className="card shadow-sm p-4">
-            <h2 className="text-center mb-4">Log In</h2>
-            {error && <div className="alert alert-danger">{error}</div>}
-            <form onSubmit={handleSubmit(onSubmit)} className="d-flex flex-column gap-3">
-              <div>
-                <label className="form-label">Email</label>
-                <input
-                  {...register('email')}
-                  className="form-control"
-                  placeholder="Enter your email"
-                />
-                {errors.email && <div className="text-danger mt-1">{errors.email.message}</div>}
-              </div>
-              <div>
-                <label className="form-label">Password</label>
-                <input
-                  {...register('password')}
-                  type="password"
-                  className="form-control"
-                  placeholder="Enter your password"
-                />
-                {errors.password && <div className="text-danger mt-1">{errors.password.message}</div>}
-              </div>
-              <button type="submit" className="btn btn-primary">Log In</button>
-            </form>
-            <p className="text-center mt-3">
-              <Link href="/forgot-password" className="text-primary text-decoration-underline">Forgot Password?</Link>
-            </p>
-            <p className="text-center mt-2">
-              Don&apos;t have an account? <Link href="/signup" className="text-primary text-decoration-underline">Sign Up</Link>
-            </p>
-          </div>
+    <div className="min-vh-100 d-flex flex-column justify-content-center py-5 bg-gray-50">
+      <div className="mx-auto w-100" style={{ maxWidth: '28rem' }}>
+        <div className="text-center mb-4">
+          <svg className="page-icon mx-auto text-indigo-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <h2 className="mt-3">Sign in to your account</h2>
+        </div>
+        <div className="card p-4">
+          {error && <div className="alert alert-danger">{error}</div>}
+          <form onSubmit={handleSubmit(onSubmit)} className="d-flex flex-column gap-3">
+            <div>
+              <input
+                {...register('email')}
+                className="form-control"
+                placeholder="Email address"
+              />
+              {errors.email && <div className="text-danger mt-1">{errors.email.message}</div>}
+            </div>
+            <div>
+              <input
+                {...register('password')}
+                type="password"
+                className="form-control"
+                placeholder="Password"
+              />
+              {errors.password && <div className="text-danger mt-1">{errors.password.message}</div>}
+            </div>
+            <div className="d-flex justify-content-end">
+              <Link href="/forgot-password" className="text-primary">Forgot your password?</Link>
+            </div>
+            <button type="submit" className="btn btn-primary">Sign In</button>
+          </form>
+          <p className="text-center mt-3 text-gray-600">
+            Or <Link href="/signup" className="text-primary">create an account</Link>
+          </p>
         </div>
       </div>
     </div>

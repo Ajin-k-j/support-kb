@@ -3,17 +3,26 @@
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { signOut } from 'firebase/auth';
-import { auth } from '@/lib/firebase';
 import { listenToUserTickets } from '@/lib/firestore';
-import { TicketData } from '@/types';
+import { listenToAllUsers } from '@/lib/users';
+import { TicketData, UserData } from '@/types';
 import TicketTable from '@/components/TicketTable';
+import Loader from '@/components/Loader';
+
+import { Box, Typography, Button, Paper } from '@mui/material';
+import { Add as AddIcon } from '@mui/icons-material';
 import Link from 'next/link';
 
 export default function Dashboard() {
-  const { user, userData, loading } = useAuth();
+  const { user, loading } = useAuth();
   const router = useRouter();
   const [tickets, setTickets] = useState<TicketData[]>([]);
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
+  const [isClient, setIsClient] = useState(false);
+
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   useEffect(() => {
     if (!loading && !user) {
@@ -23,29 +32,38 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (user) {
-      const unsubscribe = listenToUserTickets(user.uid, setTickets);
-      return () => unsubscribe();
+      const unsubscribeTickets = listenToUserTickets(user.uid, setTickets);
+      const unsubscribeUsers = listenToAllUsers(setAllUsers);
+      
+      return () => {
+        unsubscribeTickets();
+        unsubscribeUsers();
+      };
     }
   }, [user]);
 
-  if (loading) return <div className="text-center py-5">Loading...</div>;
+  if (!isClient || loading || (user && allUsers.length === 0)) {
+     return <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><Loader /></Box>;
+  }
+  
   if (!user) return null;
 
-  const handleLogout = async () => {
-    await signOut(auth);
-    router.push('/login');
-  };
-
   return (
-    <div className="container">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>Welcome, {userData?.displayName || 'User'}!</h2>
-        <div className="d-flex gap-3">
-          <Link href="/tickets/new" className="btn btn-primary">Create New Ticket</Link>
-          <button onClick={handleLogout} className="btn btn-outline-secondary">Log Out</button>
-        </div>
-      </div>
-      <TicketTable tickets={tickets} />
-    </div>
+    // CHANGE: Removed maxWidth and mx properties to make the layout full-width.
+    <Box sx={{ p: 3 }}>
+      <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+          <Typography variant="h4" component="h1">
+            My Ticket Entries
+          </Typography>
+          <Link href="/tickets/new" passHref>
+            <Button variant="contained" startIcon={<AddIcon />}>
+              Create New Ticket
+            </Button>
+          </Link>
+        </Box>
+        <TicketTable tickets={tickets} allUsers={allUsers} />
+      </Paper>
+    </Box>
   );
 }

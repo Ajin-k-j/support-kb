@@ -8,21 +8,26 @@ export interface UserData {
 
 export interface TicketData {
   id: string;
+  ticketNumber: string;
   title: string;
-  supportDescription: string; // Rich text (plain for now, Tiptap later)
-  customerDescription: string; // Rich text (plain for now)
+  // FIX: Made these fields optional to match the form validation schema.
+  // This resolves the type mismatch when calling `createTicket`.
+  supportDescription?: string;
+  customerDescription?: string;
   status: 'Open' | 'InProgress' | 'Pending' | 'Resolved' | 'Closed';
   businessImpact: 'Low' | 'Medium' | 'High' | 'Critical';
   category: string;
-  assignedTo?: string; // UID of assigned user
-  createdAt: string; // ISO string for Firestore compatibility
-  lastModified: string; // ISO string
+  assignedTo?: string;
+  assignedUsers: string[];
+  supportingLinks: string[];
+  createdAt: string;
+  lastModified: string;
   investigationLog: InvestigationEntry[];
 }
 
 export interface InvestigationEntry {
   type: 'Hypothesis' | 'Action' | 'Observation' | 'Communication';
-  description: string; // Rich text (plain for now)
-  timestamp: string; // ISO string
+  description: string;
+  timestamp: string;
   userId: string;
 }
