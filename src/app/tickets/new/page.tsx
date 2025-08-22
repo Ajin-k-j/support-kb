@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useForm } from 'react-hook-form';
@@ -185,8 +184,10 @@ export default function NewTicket() {
     if (logEditor && logType) {
       const description = logEditor.getHTML();
       if (description && description !== '<p></p>') {
+        // FIX: Assert the type of 'logType' to match the InvestigationEntry interface.
+        // This tells TypeScript that we are sure 'logType' is one of the valid enum values.
         setInvestigationLog([...investigationLog, {
-          type: logType,
+          type: logType as InvestigationEntry['type'],
           description,
           timestamp: new Date().toISOString(),
           userId: user.uid,

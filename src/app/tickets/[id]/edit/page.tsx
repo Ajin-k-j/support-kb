@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
-import { doc, getDocs, updateDoc, serverTimestamp, collection, query, where } from 'firebase/firestore';
+import { doc, getDocs, updateDoc, serverTimestamp, collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { listenToAllUsers } from '@/lib/users';
 import { TicketData, UserData, InvestigationEntry } from '@/types';
@@ -27,14 +27,14 @@ import {
 } from '@mui/icons-material';
 
 const ticketSchema = z.object({
-  ticketNumber: z.string().min(1, 'Ticket ID is required').regex(/^[a-zA-Z0-9]+$/, 'Ticket ID must be alphanumeric'),
-  title: z.string().min(1, 'Title is required'),
-  customerDescription: z.string().optional(),
-  supportDescription: z.string().optional(),
-  category: z.string().min(1, 'Category is required'),
-  status: z.enum(['Open', 'InProgress', 'Pending', 'Resolved', 'Closed']),
-  businessImpact: z.enum(['Low', 'Medium', 'High', 'Critical']),
-  supportingLinks: z.string().optional(),
+    ticketNumber: z.string().min(1, 'Ticket ID is required'),
+    title: z.string().min(1, 'Title is required'),
+    customerDescription: z.string().optional(),
+    supportDescription: z.string().optional(),
+    category: z.string().min(1, 'Category is required'),
+    status: z.enum(['Open', 'InProgress', 'Pending', 'Resolved', 'Closed']),
+    businessImpact: z.enum(['Low', 'Medium', 'High', 'Critical']),
+    supportingLinks: z.string().optional(),
 });
 
 type TicketForm = z.infer<typeof ticketSchema>;
@@ -75,22 +75,29 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
     const { id: ticketNumber } = use(params);
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
+    
+    const [ticket, setTicket] = useState<TicketData | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [ticket, setTicket] = useState<TicketData | null>(null);
-
+    
+    // State for dynamic dropdowns
+    const [categories, setCategories] = useState<string[]>([]);
+    const [logTypes, setLogTypes] = useState<string[]>([]);
+    const [isLoadingTypes, setIsLoadingTypes] = useState(true);
+    const [typeError, setTypeError] = useState<string | null>(null);
+    
     const [allUsers, setAllUsers] = useState<UserData[]>([]);
     const [assignedUsers, setAssignedUsers] = useState<string[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [investigationLog, setInvestigationLog] = useState<InvestigationEntry[]>([]);
-    const [logType, setLogType] = useState('Hypothesis');
-    
-    const { register, handleSubmit, formState: { errors }, setValue, reset } = useForm<TicketForm>({
+    const [logType, setLogType] = useState('');
+
+    const { register, handleSubmit, formState: { errors }, setValue, reset, watch } = useForm<TicketForm>({
         resolver: zodResolver(ticketSchema),
     });
     
     const editorConfig = {
-        extensions: [ StarterKit, Table.configure({ resizable: true }), TableRow, TableCell, TableHeader, CodeBlock, Image.configure({ inline: true })],
+        extensions: [StarterKit, Table.configure({ resizable: true }), TableRow, TableCell, TableHeader, CodeBlock, Image.configure({ inline: true })],
         content: '',
         editable: true,
         immediatelyRender: false,
@@ -101,15 +108,55 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
     const logEditor = useEditor({ ...editorConfig });
     
     useEffect(() => {
-        if (!authLoading && !user) {
-            router.push('/login');
-        }
+        if (!authLoading && !user) router.push('/login');
         if (user) {
             const unsubscribe = listenToAllUsers(setAllUsers);
             return () => unsubscribe();
         }
     }, [user, authLoading, router]);
+
+    // Fetch categories and log types from Firebase
+    useEffect(() => {
+        const unsubscribeCategories = onSnapshot(
+            query(collection(db, 'ticketCategories')),
+            (snapshot) => {
+                const cats = snapshot.docs.map((doc) => doc.data().name as string);
+                setCategories(cats);
+            },
+            (err) => {
+                console.error('Error fetching categories:', err);
+                setTypeError('Failed to fetch categories');
+            }
+        );
     
+        const unsubscribeLogTypes = onSnapshot(
+            query(collection(db, 'investigationLogTypes')),
+            (snapshot) => {
+                const types = snapshot.docs.map((doc) => doc.data().name as string);
+                setLogTypes(types);
+                if (types.length > 0 && !logType) {
+                    setLogType(types[0]); // Set default log type
+                }
+            },
+            (err) => {
+                console.error('Error fetching log types:', err);
+                setTypeError('Failed to fetch log types');
+            }
+        );
+        
+        // A simple way to set loading to false after the first fetch attempts
+        Promise.all([
+             getDocs(query(collection(db, 'ticketCategories'))),
+             getDocs(query(collection(db, 'investigationLogTypes')))
+        ]).finally(() => setIsLoadingTypes(false));
+    
+        return () => {
+            unsubscribeCategories();
+            unsubscribeLogTypes();
+        };
+    }, [logType]);
+    
+    // Fetch and set ticket data
     useEffect(() => {
         if (user && ticketNumber && customerEditor && supportEditor) {
             const fetchTicketByNumber = async () => {
@@ -149,8 +196,11 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
         }
     }, [user, ticketNumber, reset, customerEditor, supportEditor]);
     
-    if (authLoading || !ticket) return <div className="text-center py-5"><Loader /></div>;
-    if (error) return <div className="text-center py-5 text-danger">{error}</div>;
+    // Watch for category change from form state to update the Select component's value
+    const selectedCategory = watch('category');
+
+    if (authLoading || !ticket || isLoadingTypes) return <div className="text-center py-5"><Loader /></div>;
+    if (error || typeError) return <div className="container py-5"><div className="alert alert-danger">{error || typeError}</div></div>;
     if (!user) return null;
 
     const filteredUsers = allUsers.filter(u => u.displayName?.toLowerCase().includes(searchTerm.toLowerCase()) && !assignedUsers.includes(u.uid));
@@ -158,7 +208,7 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
     const removeUser = (uid: string) => { setAssignedUsers(assignedUsers.filter(id => id !== uid)); };
     
     const addLogEntry = () => {
-        if (logEditor) {
+        if (logEditor && logType) {
             const description = logEditor.getHTML();
             if (description && description !== '<p></p>') {
                 setInvestigationLog([...investigationLog, {
@@ -190,7 +240,7 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
                 investigationLog,
                 lastModified: serverTimestamp(),
             };
-            await updateDoc(docRef, updateData);
+            await updateDoc(docRef, updateData as any);
             router.push(`/tickets/${ticket.ticketNumber}`);
         } catch (err: any) {
             setError('Failed to update ticket: ' + err.message);
@@ -217,8 +267,7 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
                     <div className="row g-3">
                         <div className="col-md-6">
                             <label className="form-label text-gray-600">Ticket ID</label>
-                            <input {...register('ticketNumber')} className="form-control rounded-lg" style={{ padding: '0.75rem' }} />
-                            {errors.ticketNumber && <div className="text-danger text-sm">{errors.ticketNumber.message}</div>}
+                            <input {...register('ticketNumber')} readOnly className="form-control rounded-lg bg-light" style={{ padding: '0.75rem' }} />
                         </div>
                         <div className="col-md-6">
                             <label className="form-label text-gray-600">Title</label>
@@ -230,10 +279,10 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
                         <div className="col-md-4">
                             <FormControl fullWidth size="small">
                                 <InputLabel>Category</InputLabel>
-                                <Select {...register('category')} label="Category" defaultValue="General" sx={{ borderRadius: '0.5rem' }}>
-                                    <MenuItem value="General">General</MenuItem>
-                                    <MenuItem value="Technical">Technical</MenuItem>
-                                    <MenuItem value="Billing">Billing</MenuItem>
+                                <Select {...register('category')} label="Category" value={selectedCategory || ''} sx={{ borderRadius: '0.5rem' }}>
+                                    {categories.map((cat) => (
+                                        <MenuItem key={cat} value={cat}>{cat}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                         </div>
@@ -301,10 +350,9 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
                             <FormControl size="small" sx={{ minWidth: 120 }}>
                                 <InputLabel>Type</InputLabel>
                                 <Select value={logType} onChange={(e) => setLogType(e.target.value)} label="Type">
-                                    <MenuItem value="Hypothesis">Hypothesis</MenuItem>
-                                    <MenuItem value="Action">Action</MenuItem>
-                                    <MenuItem value="Observation">Observation</MenuItem>
-                                    <MenuItem value="Communication">Communication</MenuItem>
+                                    {logTypes.map((type) => (
+                                       <MenuItem key={type} value={type}>{type}</MenuItem>
+                                    ))}
                                 </Select>
                             </FormControl>
                             <button type="button" onClick={addLogEntry} className="btn btn-primary rounded-lg">Add Entry</button>

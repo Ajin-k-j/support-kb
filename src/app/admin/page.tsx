@@ -1,13 +1,15 @@
-
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
 import { collection, onSnapshot, query, writeBatch, doc, serverTimestamp, Timestamp, setDoc, deleteDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { listenToAllUsers } from '@/lib/users';
-import { TicketData, UserData } from '@/types';
+import { TicketData, UserData, InvestigationEntry } from '@/types';
 import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
+
+// Declare the bootstrap global variable to TypeScript.
+declare const bootstrap: any;
 
 // Helper function to create a downloadable file
 const downloadFile = (content: string, fileName: string, mimeType: string) => {
@@ -53,25 +55,24 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (editItem) {
+    if (editItem && modalRef.current) {
       setNewName(editItem.name);
-      const modal = new bootstrap.Modal(modalRef.current!);
+      const modal = new bootstrap.Modal(modalRef.current);
       modal.show();
     }
   }, [editItem]);
 
   useEffect(() => {
-    const unsubscribeUsers = listenToAllUsers(
-      (users) => {
-        console.log('Users fetched:', users);
-        setUserMap(new Map(users.map((u) => [u.uid, u])));
-      },
-      (err) => {
-        console.error('Error fetching users:', err);
-        setError('Failed to fetch users');
-        setLoading(false);
-      }
-    );
+    const unsubscribeUsers = listenToAllUsers((users) => {
+        if (users) {
+            console.log('Users fetched:', users);
+            setUserMap(new Map(users.map((u) => [u.uid, u])));
+        } else {
+            console.error('Error fetching users: received null or undefined');
+            setError('Failed to fetch users');
+            setLoading(false);
+        }
+    });
 
     const unsubscribeTickets = onSnapshot(
       query(collection(db, 'ticketResolutions')),
@@ -161,16 +162,23 @@ export default function AdminPage() {
     }
     if (sortField) {
       result.sort((a, b) => {
-        const aValue = a[sortField] || '';
-        const bValue = b[sortField] || '';
+        // FIX: Handle date sorting separately and ensure other fields are strings before comparing.
         if (sortField === 'lastModified') {
-          const aDate = aValue ? new Date(aValue).getTime() : 0;
-          const bDate = bValue ? new Date(bValue).getTime() : 0;
+          const aDate = a.lastModified ? new Date(a.lastModified).getTime() : 0;
+          const bDate = b.lastModified ? new Date(b.lastModified).getTime() : 0;
           return sortOrder === 'asc' ? aDate - bDate : bDate - aDate;
         }
-        return sortOrder === 'asc'
-          ? String(aValue).localeCompare(String(bValue))
-          : String(bValue).localeCompare(String(aValue));
+        
+        const aValue = a[sortField];
+        const bValue = b[sortField];
+
+        // Ensure values are strings for localeCompare, skip if they are arrays or objects
+        if (typeof aValue === 'string' && typeof bValue === 'string') {
+            return sortOrder === 'asc'
+            ? aValue.localeCompare(bValue)
+            : bValue.localeCompare(aValue);
+        }
+        return 0; // Don't sort if the field is not a string
       });
     }
     setFilteredTickets(result);
@@ -309,13 +317,13 @@ export default function AdminPage() {
   };
 
   const handleSaveEdit = async () => {
-    if (editItem && newName.trim()) {
+    if (editItem && newName.trim() && modalRef.current) {
       try {
         await setDoc(doc(db, editItem.type === 'category' ? 'ticketCategories' : 'investigationLogTypes', editItem.id), { name: newName.trim() });
         alert('Updated successfully.');
-        setEditItem(null);
-        const modal = bootstrap.Modal.getInstance(modalRef.current!);
+        const modal = bootstrap.Modal.getInstance(modalRef.current);
         modal?.hide();
+        setEditItem(null);
       } catch (error) {
         console.error('Error updating item:', error);
         alert('Failed to update.');

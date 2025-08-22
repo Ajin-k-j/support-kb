@@ -1,5 +1,6 @@
 import { db } from '@/lib/firebase';
-import { collection, query, where, onSnapshot, Unsubscribe, addDoc, updateDoc } from 'firebase/firestore';
+// Added 'doc' and 'getDocs' to the import list
+import { collection, query, where, onSnapshot, Unsubscribe, addDoc, updateDoc, doc, getDocs } from 'firebase/firestore';
 import { TicketData } from '@/types';
 
 export function listenToUserTickets(userId: string, callback: (tickets: TicketData[]) => void): Unsubscribe {
@@ -41,4 +42,13 @@ export async function updateTicket(id: string, ticket: Partial<TicketData>): Pro
   };
   const docRef = doc(db, 'ticketResolutions', id);
   await updateDoc(docRef, ticketData);
+}
+
+// NEW: Function to get all ticket IDs for static generation
+export async function getAllTicketIds() {
+  const ticketsRef = collection(db, 'ticketResolutions');
+  const snapshot = await getDocs(ticketsRef);
+  return snapshot.docs.map(doc => ({
+    id: doc.id,
+  }));
 }
