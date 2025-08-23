@@ -6,7 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+// **FIX:** Added 'getDocs' to the import statement
+import { collection, onSnapshot, query, getDocs } from 'firebase/firestore'; 
 import { db } from '@/lib/firebase';
 import { createTicket } from '@/lib/firestore';
 import { listenToAllUsers } from '@/lib/users';
@@ -94,6 +95,7 @@ export default function NewTicket() {
   const [logTypes, setLogTypes] = useState<string[]>([]);
   const [isLoadingTypes, setIsLoadingTypes] = useState(true);
   const [typeError, setTypeError] = useState<string | null>(null);
+  const [isCollabActive, setIsCollabActive] = useState(false);
 
   const { register, handleSubmit, formState: { errors }, setValue } = useForm<TicketForm>({
     resolver: zodResolver(ticketSchema),
@@ -136,35 +138,28 @@ export default function NewTicket() {
   }, [user]);
 
   useEffect(() => {
-    const unsubscribeCategories = onSnapshot(
-      query(collection(db, 'ticketCategories')),
+    const unsubscribeCategories = onSnapshot(query(collection(db, 'ticketCategories')),
       (snapshot) => {
         const cats = snapshot.docs.map((doc) => doc.data().name as string);
         setCategories(cats);
-        if (cats.length > 0 && !categories.includes('')) setValue('category', cats[0]);
-        setIsLoadingTypes(false);
+        if (cats.length > 0) setValue('category', cats[0]);
       },
-      (err) => {
-        console.error('Error fetching categories:', err);
-        setTypeError('Failed to fetch categories');
-        setIsLoadingTypes(false);
-      }
+      (err) => { console.error('Error fetching categories:', err); setTypeError('Failed to fetch categories'); }
     );
 
-    const unsubscribeLogTypes = onSnapshot(
-      query(collection(db, 'investigationLogTypes')),
+    const unsubscribeLogTypes = onSnapshot(query(collection(db, 'investigationLogTypes')),
       (snapshot) => {
         const types = snapshot.docs.map((doc) => doc.data().name as string);
         setLogTypes(types);
         if (types.length > 0) setLogType(types[0]);
-        setIsLoadingTypes(false);
       },
-      (err) => {
-        console.error('Error fetching log types:', err);
-        setTypeError('Failed to fetch log types');
-        setIsLoadingTypes(false);
-      }
+      (err) => { console.error('Error fetching log types:', err); setTypeError('Failed to fetch log types'); }
     );
+     
+    Promise.all([
+        getDocs(query(collection(db, 'ticketCategories'))),
+        getDocs(query(collection(db, 'investigationLogTypes')))
+    ]).finally(() => setIsLoadingTypes(false));
 
     return () => {
       unsubscribeCategories();
@@ -184,8 +179,6 @@ export default function NewTicket() {
     if (logEditor && logType) {
       const description = logEditor.getHTML();
       if (description && description !== '<p></p>') {
-        // FIX: Assert the type of 'logType' to match the InvestigationEntry interface.
-        // This tells TypeScript that we are sure 'logType' is one of the valid enum values.
         setInvestigationLog([...investigationLog, {
           type: logType as InvestigationEntry['type'],
           description,
@@ -227,74 +220,64 @@ export default function NewTicket() {
         .ProseMirror pre { background: #f5f5f5; padding: 8px; border-radius: 4px; }
         .ProseMirror p { margin: 0; }
       `}</style>
+
       <h2 className="mb-3 text-gray-800">Create New Ticket</h2>
       <form onSubmit={handleSubmit(onSubmit)} className="card p-3 shadow-sm border-0 rounded-lg">
         {error && <div className="alert alert-danger mb-3">{error}</div>}
 
-        {/* Section: Ticket Details */}
         <div className="mb-4 border-bottom pb-3">
-          <h3 className="mb-2 text-gray-700 font-weight-semibold">Ticket Details</h3>
-          <div className="row g-3">
-            <div className="col-md-6">
-              <label className="form-label text-gray-600">Ticket ID</label>
-              <input {...register('ticketNumber')} className="form-control rounded-lg" style={{ padding: '0.75rem' }} />
-              {errors.ticketNumber && <div className="text-danger text-sm">{errors.ticketNumber.message}</div>}
+            <h3 className="mb-2 text-gray-700 font-weight-semibold">Ticket Details</h3>
+            <div className="row g-3">
+                <div className="col-md-6">
+                    <TextField fullWidth {...register('ticketNumber')} label="Ticket ID" error={!!errors.ticketNumber} helperText={errors.ticketNumber?.message} />
+                </div>
+                <div className="col-md-6">
+                    <TextField fullWidth {...register('title')} label="Title" error={!!errors.title} helperText={errors.title?.message} />
+                </div>
             </div>
-            <div className="col-md-6">
-              <label className="form-label text-gray-600">Title</label>
-              <input {...register('title')} className="form-control rounded-lg" style={{ padding: '0.75rem' }} />
-              {errors.title && <div className="text-danger text-sm">{errors.title.message}</div>}
+            <div className="row g-3 mt-2">
+                <div className="col-md-4">
+                    <FormControl fullWidth>
+                        <InputLabel>Category</InputLabel>
+                        <Select {...register('category')} label="Category" defaultValue={categories[0] || ''}>
+                            {categories.map((cat) => ( <MenuItem key={cat} value={cat}>{cat}</MenuItem> ))}
+                        </Select>
+                    </FormControl>
+                </div>
+                <div className="col-md-4">
+                    <FormControl fullWidth>
+                        <InputLabel>Status</InputLabel>
+                        <Select {...register('status')} label="Status" defaultValue="Open">
+                            <MenuItem value="Open">Open</MenuItem>
+                            <MenuItem value="InProgress">In Progress</MenuItem>
+                            <MenuItem value="Pending">Pending</MenuItem>
+                            <MenuItem value="Resolved">Resolved</MenuItem>
+                            <MenuItem value="Closed">Closed</MenuItem>
+                        </Select>
+                    </FormControl>
+                </div>
+                <div className="col-md-4">
+                     <FormControl fullWidth>
+                        <InputLabel>Business Impact</InputLabel>
+                        <Select {...register('businessImpact')} label="Business Impact" defaultValue="Low">
+                            <MenuItem value="Low">Low</MenuItem>
+                            <MenuItem value="Medium">Medium</MenuItem>
+                            <MenuItem value="High">High</MenuItem>
+                            <MenuItem value="Critical">Critical</MenuItem>
+                        </Select>
+                    </FormControl>
+                </div>
             </div>
-          </div>
-          <div className="row g-3 mt-2">
-            <div className="col-md-4">
-              <FormControl fullWidth size="small">
-                <InputLabel>Category</InputLabel>
-                <Select {...register('category')} label="Category" defaultValue={categories[0] || ''} sx={{ borderRadius: '0.5rem' }}>
-                  {categories.map((cat) => (
-                    <MenuItem key={cat} value={cat}>{cat}</MenuItem>
-                  ))}
-                </Select>
-                {errors.category && <Typography color="error" variant="caption">{errors.category.message}</Typography>}
-              </FormControl>
+            <div className="mt-3">
+                <label className="form-label text-gray-600">Customer Description</label>
+                <div className="border rounded bg-white"><Toolbar editor={customerEditor} /><EditorContent editor={customerEditor} /></div>
             </div>
-            <div className="col-md-4">
-              <FormControl fullWidth size="small">
-                <InputLabel>Status</InputLabel>
-                <Select {...register('status')} label="Status" defaultValue="Open" sx={{ borderRadius: '0.5rem' }}>
-                  <MenuItem value="Open">Open</MenuItem>
-                  <MenuItem value="InProgress">In Progress</MenuItem>
-                  <MenuItem value="Pending">Pending</MenuItem>
-                  <MenuItem value="Resolved">Resolved</MenuItem>
-                  <MenuItem value="Closed">Closed</MenuItem>
-                </Select>
-                {errors.status && <Typography color="error" variant="caption">{errors.status.message}</Typography>}
-              </FormControl>
+            <div className="mt-3">
+                <label className="form-label text-gray-600">Support Description</label>
+                <div className="border rounded bg-white"><Toolbar editor={supportEditor} /><EditorContent editor={supportEditor} /></div>
             </div>
-            <div className="col-md-4">
-              <FormControl fullWidth size="small">
-                <InputLabel>Business Impact</InputLabel>
-                <Select {...register('businessImpact')} label="Business Impact" defaultValue="Low" sx={{ borderRadius: '0.5rem' }}>
-                  <MenuItem value="Low">Low</MenuItem>
-                  <MenuItem value="Medium">Medium</MenuItem>
-                  <MenuItem value="High">High</MenuItem>
-                  <MenuItem value="Critical">Critical</MenuItem>
-                </Select>
-                {errors.businessImpact && <Typography color="error" variant="caption">{errors.businessImpact.message}</Typography>}
-              </FormControl>
-            </div>
-          </div>
-          <div className="mt-3">
-            <label className="form-label text-gray-600">Customer Description</label>
-            <div className="border rounded bg-white"><Toolbar editor={customerEditor} /><EditorContent editor={customerEditor} /></div>
-          </div>
-          <div className="mt-3">
-            <label className="form-label text-gray-600">Support Description</label>
-            <div className="border rounded bg-white"><Toolbar editor={supportEditor} /><EditorContent editor={supportEditor} /></div>
-          </div>
         </div>
 
-        {/* Section: Collaboration */}
         <div className="mb-4 border-bottom pb-3">
           <h3 className="mb-2 text-gray-700 font-weight-semibold">Collaboration</h3>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
@@ -303,61 +286,68 @@ export default function NewTicket() {
               return u ? <Chip key={uid} label={u.displayName || 'Unknown User'} onDelete={() => removeUser(uid)} sx={{ bgcolor: '#e0e7ff', color: '#111827', '& .MuiChip-deleteIcon': { color: '#4f46e5' } }} /> : null;
             })}
           </Box>
-          <TextField label="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} fullWidth variant="outlined" size="small" sx={{ borderRadius: '0.5rem' }} />
-          <Box sx={{ maxHeight: 128, overflowY: 'auto', bgcolor: '#ffffff', border: '1px solid #e5e7eb', borderRadius: 1, mt: 1 }}>
-            {filteredUsers.map(u => (
-              <Box key={u.uid} sx={{ p: 1, '&:hover': { bgcolor: '#f3f4f6', cursor: 'pointer' } }} onClick={() => addUser(u.uid)}>
-                {u.displayName || 'Unknown User'}
-              </Box>
-            ))}
-          </Box>
+          <TextField
+            label="Search and add users..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            onFocus={() => setIsCollabActive(true)}
+            fullWidth
+            variant="outlined"
+            size="small"
+          />
+          {isCollabActive && (
+            <Paper sx={{ maxHeight: 128, overflowY: 'auto', border: '1px solid #e5e7eb', mt: 1 }}>
+              {filteredUsers.map(u => (
+                <MenuItem key={u.uid} onClick={() => addUser(u.uid)}>
+                   {u.displayName || 'Unknown User'}
+                </MenuItem>
+              ))}
+              {filteredUsers.length === 0 && searchTerm && <Typography sx={{p: 2, color: 'text.secondary'}}>No users found.</Typography>}
+            </Paper>
+          )}
         </div>
 
-        {/* Section: Supporting Links */}
         <div className="mb-4 border-bottom pb-3">
-          <label className="form-label text-gray-600">Supporting Links (one per line, optional)</label>
-          <textarea {...register('supportingLinks')} className="form-control rounded-lg" rows={3} style={{ padding: '0.75rem', minHeight: '100px', resize: 'vertical' }}></textarea>
+            <label className="form-label text-gray-600">Supporting Links (one per line, optional)</label>
+            <textarea {...register('supportingLinks')} className="form-control rounded-lg" rows={3} style={{ padding: '0.75rem', minHeight: '100px', resize: 'vertical' }}></textarea>
         </div>
 
-        {/* Section: Investigation Log */}
         <div className="mb-4">
-          <div className="d-flex justify-content-between align-items-center mb-2">
-            <h3 className="mb-0 text-gray-700 font-weight-semibold">Investigation Log</h3>
-            <div className="d-flex gap-3 align-items-center">
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel>Type</InputLabel>
-                <Select value={logType} onChange={(e) => setLogType(e.target.value)} label="Type">
-                  {logTypes.map((type) => (
-                    <MenuItem key={type} value={type}>{type}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <button type="button" onClick={addLogEntry} className="btn btn-primary rounded-lg">Add Entry</button>
-            </div>
-          </div>
-          <div className="border rounded bg-white">
-            <Toolbar editor={logEditor} />
-            <EditorContent editor={logEditor} />
-          </div>
-          <div className="mt-3">
-            {investigationLog.map((entry, index) => (
-              <div key={index} className="mb-2 p-2 border rounded bg-gray-50 d-flex justify-content-between align-items-start">
-                <div>
-                  <p className="text-sm text-gray-600"><strong>{entry.type}</strong> by {allUsers.find(u => u.uid === entry.userId)?.displayName || '...'} at {new Date(entry.timestamp).toLocaleString()}</p>
-                  <p className="text-sm" dangerouslySetInnerHTML={{ __html: entry.description }} style={{ lineHeight: '1.4' }}></p>
+            <div className="d-flex justify-content-between align-items-center mb-2">
+                <h3 className="mb-0 text-gray-700 font-weight-semibold">Investigation Log</h3>
+                <div className="d-flex gap-3 align-items-center">
+                    <FormControl size="small" sx={{ minWidth: 120 }}>
+                        <InputLabel>Type</InputLabel>
+                        <Select value={logType} onChange={(e) => setLogType(e.target.value)} label="Type">
+                            {logTypes.map((type) => ( <MenuItem key={type} value={type}>{type}</MenuItem> ))}
+                        </Select>
+                    </FormControl>
+                    <button type="button" onClick={addLogEntry} className="btn btn-primary rounded-lg">Add Entry</button>
                 </div>
-                <button type="button" onClick={() => removeLogEntry(index)} className="btn btn-sm btn-outline-danger">Remove</button>
-              </div>
-            ))}
-          </div>
-        </div>
+            </div>
+            <div className="border rounded bg-white">
+                <Toolbar editor={logEditor} />
+                <EditorContent editor={logEditor} />
+            </div>
 
-        {/* Section: Action Buttons */}
+            <div className="mt-3">
+                {investigationLog.map((entry, index) => (
+                    <div key={index} className="mb-2 p-2 border rounded bg-gray-50 d-flex justify-content-between align-items-start">
+                        <div>
+                            <p className="text-sm text-gray-600"><strong>{entry.type}</strong> by {allUsers.find(u => u.uid === entry.userId)?.displayName || '...'} at {new Date(entry.timestamp).toLocaleString()}</p>
+                            <div className="prose-mirror-content" dangerouslySetInnerHTML={{ __html: entry.description }} />
+                        </div>
+                        <button type="button" onClick={() => removeLogEntry(index)} className="btn btn-sm btn-outline-danger">Remove</button>
+                    </div>
+                ))}
+            </div>
+        </div>
+        
         <div className="d-flex justify-content-end gap-3">
-          <button type="button" onClick={() => router.push('/dashboard')} className="btn btn-outline-secondary rounded-lg" style={{ padding: '0.75rem 1.5rem' }}>Close</button>
-          <button type="submit" className="btn btn-primary rounded-lg" disabled={isSubmitting} style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(to right, #4f46e5, #6366f1)', color: '#ffffff' }}>
-            {isSubmitting ? <Loader /> : 'Save Entry'}
-          </button>
+            <button type="button" onClick={() => router.push('/dashboard')} className="btn btn-outline-secondary rounded-lg" style={{ padding: '0.75rem 1.5rem' }}>Close</button>
+            <button type="submit" className="btn btn-primary rounded-lg" disabled={isSubmitting} style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(to right, #4f46e5, #6366f1)', color: '#ffffff' }}>
+                {isSubmitting ? <Loader /> : 'Save Entry'}
+            </button>
         </div>
       </form>
     </div>

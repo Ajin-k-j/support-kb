@@ -20,7 +20,7 @@ import { CodeBlock } from '@tiptap/extension-code-block';
 import Image from '@tiptap/extension-image';
 import Loader from '@/components/Loader';
 
-import { TextField, Select, MenuItem, FormControl, InputLabel, Chip, Box, Typography, IconButton } from '@mui/material';
+import { TextField, Select, MenuItem, FormControl, InputLabel, Chip, Box, Typography, IconButton, Paper } from '@mui/material';
 import {
     FormatBold, FormatItalic, FormatListBulleted, FormatListNumbered,
     Code as CodeIcon, TableChart as TableIcon, Image as ImageIcon,
@@ -80,7 +80,6 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
     const [error, setError] = useState<string | null>(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
     
-    // State for dynamic dropdowns
     const [categories, setCategories] = useState<string[]>([]);
     const [logTypes, setLogTypes] = useState<string[]>([]);
     const [isLoadingTypes, setIsLoadingTypes] = useState(true);
@@ -91,10 +90,15 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
     const [searchTerm, setSearchTerm] = useState('');
     const [investigationLog, setInvestigationLog] = useState<InvestigationEntry[]>([]);
     const [logType, setLogType] = useState('');
+    const [isCollabActive, setIsCollabActive] = useState(false);
 
     const { register, handleSubmit, formState: { errors }, setValue, reset, watch } = useForm<TicketForm>({
         resolver: zodResolver(ticketSchema),
     });
+    
+    const selectedCategory = watch('category');
+    const selectedStatus = watch('status');
+    const selectedBusinessImpact = watch('businessImpact');
     
     const editorConfig = {
         extensions: [StarterKit, Table.configure({ resizable: true }), TableRow, TableCell, TableHeader, CodeBlock, Image.configure({ inline: true })],
@@ -115,72 +119,52 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
         }
     }, [user, authLoading, router]);
 
-    // Fetch categories and log types from Firebase
     useEffect(() => {
-        const unsubscribeCategories = onSnapshot(
-            query(collection(db, 'ticketCategories')),
-            (snapshot) => {
-                const cats = snapshot.docs.map((doc) => doc.data().name as string);
-                setCategories(cats);
-            },
-            (err) => {
-                console.error('Error fetching categories:', err);
-                setTypeError('Failed to fetch categories');
-            }
+        const unsubscribeCategories = onSnapshot(query(collection(db, 'ticketCategories')),
+            (snapshot) => { setCategories(snapshot.docs.map((doc) => doc.data().name as string)); },
+            (err) => { console.error('Error fetching categories:', err); setTypeError('Failed to fetch categories'); }
         );
-    
-        const unsubscribeLogTypes = onSnapshot(
-            query(collection(db, 'investigationLogTypes')),
+        const unsubscribeLogTypes = onSnapshot(query(collection(db, 'investigationLogTypes')),
             (snapshot) => {
                 const types = snapshot.docs.map((doc) => doc.data().name as string);
                 setLogTypes(types);
-                if (types.length > 0 && !logType) {
-                    setLogType(types[0]); // Set default log type
-                }
+                if (types.length > 0 && !logType) { setLogType(types[0]); }
             },
-            (err) => {
-                console.error('Error fetching log types:', err);
-                setTypeError('Failed to fetch log types');
-            }
+            (err) => { console.error('Error fetching log types:', err); setTypeError('Failed to fetch log types'); }
         );
-        
-        // A simple way to set loading to false after the first fetch attempts
         Promise.all([
              getDocs(query(collection(db, 'ticketCategories'))),
              getDocs(query(collection(db, 'investigationLogTypes')))
         ]).finally(() => setIsLoadingTypes(false));
-    
         return () => {
             unsubscribeCategories();
             unsubscribeLogTypes();
         };
     }, [logType]);
     
-    // Fetch and set ticket data
     useEffect(() => {
         if (user && ticketNumber && customerEditor && supportEditor) {
             const fetchTicketByNumber = async () => {
                 try {
-                    const ticketsRef = collection(db, 'ticketResolutions');
-                    const q = query(ticketsRef, where("ticketNumber", "==", ticketNumber));
+                    const q = query(collection(db, 'ticketResolutions'), where("ticketNumber", "==", ticketNumber));
                     const querySnapshot = await getDocs(q);
-
                     if (!querySnapshot.empty) {
                         const ticketDoc = querySnapshot.docs[0];
                         const data = { id: ticketDoc.id, ...ticketDoc.data() } as TicketData;
-                        
                         setTicket(data);
-                        
-                        reset({
+
+                        const formData: TicketForm = {
                             ticketNumber: data.ticketNumber,
                             title: data.title,
                             category: data.category,
                             status: data.status,
                             businessImpact: data.businessImpact,
-                            customerDescription: data.customerDescription,
-                            supportDescription: data.supportDescription,
+                            customerDescription: data.customerDescription || '',
+                            supportDescription: data.supportDescription || '',
                             supportingLinks: data.supportingLinks?.join('\n') || '',
-                        });
+                        };
+                        reset(formData);
+                        
                         customerEditor.commands.setContent(data.customerDescription || '');
                         supportEditor.commands.setContent(data.supportDescription || '');
                         setAssignedUsers(data.assignedUsers || []);
@@ -195,9 +179,6 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
             fetchTicketByNumber();
         }
     }, [user, ticketNumber, reset, customerEditor, supportEditor]);
-    
-    // Watch for category change from form state to update the Select component's value
-    const selectedCategory = watch('category');
 
     if (authLoading || !ticket || isLoadingTypes) return <div className="text-center py-5"><Loader /></div>;
     if (error || typeError) return <div className="container py-5"><div className="alert alert-danger">{error || typeError}</div></div>;
@@ -265,77 +246,28 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
                 <div className="mb-4 border-bottom pb-3">
                     <h3 className="mb-2 text-gray-700 font-weight-semibold">Ticket Details</h3>
                     <div className="row g-3">
-                        <div className="col-md-6">
-                            <label className="form-label text-gray-600">Ticket ID</label>
-                            <input {...register('ticketNumber')} readOnly className="form-control rounded-lg bg-light" style={{ padding: '0.75rem' }} />
-                        </div>
-                        <div className="col-md-6">
-                            <label className="form-label text-gray-600">Title</label>
-                            <input {...register('title')} className="form-control rounded-lg" style={{ padding: '0.75rem' }} />
-                            {errors.title && <div className="text-danger text-sm">{errors.title.message}</div>}
-                        </div>
+                        <div className="col-md-6"><TextField fullWidth {...register('ticketNumber')} label="Ticket ID" InputProps={{ readOnly: true }} /></div>
+                        <div className="col-md-6"><TextField fullWidth {...register('title')} label="Title" error={!!errors.title} helperText={errors.title?.message} /></div>
                     </div>
                     <div className="row g-3 mt-2">
-                        <div className="col-md-4">
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Category</InputLabel>
-                                <Select {...register('category')} label="Category" value={selectedCategory || ''} sx={{ borderRadius: '0.5rem' }}>
-                                    {categories.map((cat) => (
-                                        <MenuItem key={cat} value={cat}>{cat}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
-                        </div>
-                        <div className="col-md-4">
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Status</InputLabel>
-                                <Select {...register('status')} label="Status" defaultValue="Open" sx={{ borderRadius: '0.5rem' }}>
-                                    <MenuItem value="Open">Open</MenuItem>
-                                    <MenuItem value="InProgress">In Progress</MenuItem>
-                                    <MenuItem value="Pending">Pending</MenuItem>
-                                    <MenuItem value="Resolved">Resolved</MenuItem>
-                                    <MenuItem value="Closed">Closed</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </div>
-                        <div className="col-md-4">
-                            <FormControl fullWidth size="small">
-                                <InputLabel>Business Impact</InputLabel>
-                                <Select {...register('businessImpact')} label="Business Impact" defaultValue="Low" sx={{ borderRadius: '0.5rem' }}>
-                                    <MenuItem value="Low">Low</MenuItem>
-                                    <MenuItem value="Medium">Medium</MenuItem>
-                                    <MenuItem value="High">High</MenuItem>
-                                    <MenuItem value="Critical">Critical</MenuItem>
-                                </Select>
-                            </FormControl>
-                        </div>
+                        <div className="col-md-4"><FormControl fullWidth><InputLabel>Category</InputLabel><Select {...register('category')} label="Category" value={selectedCategory || ''}>{categories.map((cat) => ( <MenuItem key={cat} value={cat}>{cat}</MenuItem> ))}</Select></FormControl></div>
+                        <div className="col-md-4"><FormControl fullWidth><InputLabel>Status</InputLabel><Select {...register('status')} label="Status" value={selectedStatus || ''}><MenuItem value="Open">Open</MenuItem><MenuItem value="InProgress">In Progress</MenuItem><MenuItem value="Pending">Pending</MenuItem><MenuItem value="Resolved">Resolved</MenuItem><MenuItem value="Closed">Closed</MenuItem></Select></FormControl></div>
+                        <div className="col-md-4"><FormControl fullWidth><InputLabel>Business Impact</InputLabel><Select {...register('businessImpact')} label="Business Impact" value={selectedBusinessImpact || ''}><MenuItem value="Low">Low</MenuItem><MenuItem value="Medium">Medium</MenuItem><MenuItem value="High">High</MenuItem><MenuItem value="Critical">Critical</MenuItem></Select></FormControl></div>
                     </div>
-                    <div className="mt-3">
-                        <label className="form-label text-gray-600">Customer Description</label>
-                        <div className="border rounded bg-white"><Toolbar editor={customerEditor} /><EditorContent editor={customerEditor} /></div>
-                    </div>
-                    <div className="mt-3">
-                        <label className="form-label text-gray-600">Support Description</label>
-                        <div className="border rounded bg-white"><Toolbar editor={supportEditor} /><EditorContent editor={supportEditor} /></div>
-                    </div>
+                    <div className="mt-3"><label className="form-label text-gray-600">Customer Description</label><div className="border rounded bg-white"><Toolbar editor={customerEditor} /><EditorContent editor={customerEditor} /></div></div>
+                    <div className="mt-3"><label className="form-label text-gray-600">Support Description</label><div className="border rounded bg-white"><Toolbar editor={supportEditor} /><EditorContent editor={supportEditor} /></div></div>
                 </div>
                 
                 <div className="mb-4 border-bottom pb-3">
                     <h3 className="mb-2 text-gray-700 font-weight-semibold">Collaboration</h3>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                        {assignedUsers.map(uid => {
-                            const u = allUsers.find(us => us.uid === uid);
-                            return u ? <Chip key={uid} label={u.displayName || '...'} onDelete={() => removeUser(uid)} /> : null;
-                        })}
-                    </Box>
-                    <TextField label="Search users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} fullWidth variant="outlined" size="small" />
-                    <Box sx={{ maxHeight: 128, overflowY: 'auto', bgcolor: '#ffffff', border: '1px solid #e5e7eb', mt: 1 }}>
-                        {filteredUsers.map(u => (
-                            <Box key={u.uid} sx={{ p: 1, '&:hover': { bgcolor: '#f3f4f6', cursor: 'pointer' } }} onClick={() => addUser(u.uid)}>
-                                {u.displayName || '...'}
-                            </Box>
-                        ))}
-                    </Box>
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>{assignedUsers.map(uid => { const u = allUsers.find(us => us.uid === uid); return u ? <Chip key={uid} label={u.displayName || '...'} onDelete={() => removeUser(uid)} /> : null; })}</Box>
+                    <TextField label="Search and add users..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} onFocus={() => setIsCollabActive(true)} fullWidth variant="outlined" size="small" />
+                    {isCollabActive && (
+                        <Paper sx={{ maxHeight: 128, overflowY: 'auto', border: '1px solid #e5e7eb', mt: 1 }}>
+                        {filteredUsers.map(u => ( <MenuItem key={u.uid} onClick={() => addUser(u.uid)}>{u.displayName || 'Unknown User'}</MenuItem>))}
+                        {filteredUsers.length === 0 && searchTerm && <Typography sx={{p: 2, color: 'text.secondary'}}>No users found.</Typography>}
+                        </Paper>
+                    )}
                 </div>
 
                 <div className="mb-4 border-bottom pb-3">
@@ -347,36 +279,30 @@ export default function EditTicket({ params }: { params: Promise<{ id: string }>
                     <div className="d-flex justify-content-between align-items-center mb-2">
                         <h3 className="mb-0 text-gray-700 font-weight-semibold">Investigation Log</h3>
                         <div className="d-flex gap-3 align-items-center">
-                            <FormControl size="small" sx={{ minWidth: 120 }}>
-                                <InputLabel>Type</InputLabel>
-                                <Select value={logType} onChange={(e) => setLogType(e.target.value)} label="Type">
-                                    {logTypes.map((type) => (
-                                       <MenuItem key={type} value={type}>{type}</MenuItem>
-                                    ))}
-                                </Select>
-                            </FormControl>
+                            <FormControl size="small" sx={{ minWidth: 120 }}><InputLabel>Type</InputLabel><Select value={logType} onChange={(e) => setLogType(e.target.value)} label="Type">{logTypes.map((type) => (<MenuItem key={type} value={type}>{type}</MenuItem>))}</Select></FormControl>
                             <button type="button" onClick={addLogEntry} className="btn btn-primary rounded-lg">Add Entry</button>
                         </div>
                     </div>
-                    <div className="border rounded bg-white">
-                        <Toolbar editor={logEditor} />
-                        <EditorContent editor={logEditor} />
-                    </div>
+                    <div className="border rounded bg-white"><Toolbar editor={logEditor} /><EditorContent editor={logEditor} /></div>
                     <div className="mt-3">
-                        {investigationLog.map((entry, index) => (
-                            <div key={index} className="mb-2 p-2 border rounded bg-gray-50 d-flex justify-content-between align-items-start">
-                                <div>
-                                    <p className="text-sm text-gray-600"><strong>{entry.type}</strong> by {allUsers.find(u => u.uid === entry.userId)?.displayName || '...'} at {new Date(entry.timestamp).toLocaleString()}</p>
-                                    <p className="text-sm" dangerouslySetInnerHTML={{ __html: entry.description }} style={{ lineHeight: '1.4' }}></p>
+                        {/* **THE FIX:** Reversed the array and calculated the original index for the remove function */}
+                        {[...investigationLog].reverse().map((entry, index) => {
+                            const originalIndex = investigationLog.length - 1 - index;
+                            return (
+                                <div key={originalIndex} className="mb-2 p-2 border rounded bg-gray-50 d-flex justify-content-between align-items-start">
+                                    <div>
+                                        <p className="text-sm text-gray-600"><strong>{entry.type}</strong> by {allUsers.find(u => u.uid === entry.userId)?.displayName || '...'} at {new Date(entry.timestamp).toLocaleString()}</p>
+                                        <div className="prose-mirror-content" dangerouslySetInnerHTML={{ __html: entry.description }} />
+                                    </div>
+                                    <button type="button" onClick={() => removeLogEntry(originalIndex)} className="btn btn-sm btn-outline-danger">Remove</button>
                                 </div>
-                                <button type="button" onClick={() => removeLogEntry(index)} className="btn btn-sm btn-outline-danger">Remove</button>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </div>
                 
                 <div className="d-flex justify-content-end gap-3">
-                    <button type="button" onClick={() => router.push('/dashboard')} className="btn btn-outline-secondary rounded-lg" style={{ padding: '0.75rem 1.5rem' }}>Cancel</button>
+                    <button type="button" onClick={() => router.push(`/tickets/${ticketNumber}`)} className="btn btn-outline-secondary rounded-lg" style={{ padding: '0.75rem 1.5rem' }}>Cancel</button>
                     <button type="submit" className="btn btn-primary rounded-lg" disabled={isSubmitting} style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(to right, #4f46e5, #6366f1)', color: '#ffffff' }}>
                         {isSubmitting ? <Loader /> : 'Save Changes'}
                     </button>
