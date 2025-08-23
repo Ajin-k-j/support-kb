@@ -21,35 +21,35 @@ import {
 export default function TicketView({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
 
-    const { user, loading } = useAuth();
+    // useAuth is still needed to conditionally show the "Edit" button
+    const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [ticket, setTicket] = useState<TicketData | null>(null);
     const [allUsers, setAllUsers] = useState<UserData[]>([]);
     const [error, setError] = useState<string | null>(null);
-
-    // **FIX 1:** State now holds an array of expanded accordion IDs
     const [expandedAccordions, setExpandedAccordions] = useState<string[]>([]);
 
+    // **CHANGE 1:** This effect now ONLY fetches user data if a user is logged in.
+    // It no longer blocks the page for non-logged-in users.
     useEffect(() => {
-        if (!loading && !user) router.push('/login');
         if (user) {
             const unsubscribe = listenToAllUsers(setAllUsers);
             return () => unsubscribe();
         }
-    }, [user, loading, router]);
+    }, [user]);
     
     // Set the initially expanded accordion when the ticket data loads
     useEffect(() => {
         if (ticket?.investigationLog && ticket.investigationLog.length > 0) {
-            // The newest entry is the last one in the original array
             const newestEntryTimestamp = ticket.investigationLog[ticket.investigationLog.length - 1].timestamp;
-            // Initialize the state with the newest entry expanded
             setExpandedAccordions([newestEntryTimestamp]);
         }
     }, [ticket]); 
 
+    // **CHANGE 2:** This effect now fetches the ticket data for EVERYONE.
+    // The dependency on `user` has been removed.
     useEffect(() => {
-        if (user && id) {
+        if (id) {
             const ticketsRef = collection(db, 'ticketResolutions');
             const q = query(ticketsRef, where("ticketNumber", "==", id));
 
@@ -75,7 +75,7 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                 setError('Error querying for ticket: ' + err.message);
             });
         }
-    }, [user, id]);
+    }, [id]);
 
     const getStatusChipColor = (status: string) => {
         switch (status) {
@@ -94,39 +94,25 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
         return url;
     };
     
-    // **FIX 2:** New handler to manage an array of expanded states
     const handleAccordionChange = (panelId: string) => (event: React.SyntheticEvent, isExpanded: boolean) => {
-        setExpandedAccordions(prev => {
-            if (isExpanded) {
-                // Add the panelId to the array if it's not already there
-                return [...prev, panelId];
-            } else {
-                // Remove the panelId from the array
-                return prev.filter(id => id !== panelId);
-            }
-        });
+        setExpandedAccordions(prev => isExpanded ? [...prev, panelId] : prev.filter(id => id !== panelId));
     };
     
-    // Helper function to safely format dates
     const formatDate = (dateValue: any): string => {
         if (!dateValue) return 'N/A';
-        // Handle Firestore Timestamp objects
         if (dateValue instanceof Timestamp) {
             return dateValue.toDate().toLocaleString();
         }
-        // Handle ISO strings or other date formats
         const date = new Date(dateValue);
-        if (isNaN(date.getTime())) {
-            return 'Invalid Date';
-        }
-        return date.toLocaleString();
+        return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
     };
 
 
-    if (loading || !ticket || allUsers.length === 0) {
+    if (authLoading || (!ticket && !error)) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><Loader /></Box>;
     }
     if (error) return <Typography color="error" sx={{ textAlign: 'center', p: 5 }}>{error}</Typography>;
+    if (!ticket) return null; // Should not happen if error case is handled, but good for safety
 
     return (
         <div className="container py-2">
@@ -138,13 +124,16 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
             `}</style>
             <div className="d-flex justify-content-between align-items-center mb-3">
                  <h2 className="mb-0 text-gray-800">View Ticket</h2>
-                 <Button
-                    variant="contained"
-                    startIcon={<EditIcon />}
-                    onClick={() => router.push(`/tickets/${ticket.ticketNumber}/edit`)}
-                >
-                    Edit Ticket
-                </Button>
+                 {/* **CHANGE 3:** The Edit button is now only shown to logged-in users */}
+                 {user && (
+                    <Button
+                        variant="contained"
+                        startIcon={<EditIcon />}
+                        onClick={() => router.push(`/tickets/${ticket.ticketNumber}/edit`)}
+                    >
+                        Edit Ticket
+                    </Button>
+                 )}
             </div>
 
             <div className="card p-3 shadow-sm border-0 rounded-lg">
@@ -159,7 +148,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                          <div className="col-md-4"><Paper variant="outlined" sx={{ p: 2, height: '100%' }}><Typography variant="overline" color="text.secondary" display="block">Business Impact</Typography><Typography variant="h6">{ticket.businessImpact}</Typography></Paper></div>
                          <div className="col-md-4"><Paper variant="outlined" sx={{ p: 2, height: '100%' }}><Typography variant="overline" color="text.secondary" display="block">Category</Typography><Typography variant="h6">{ticket.category}</Typography></Paper></div>
                      </div>
-                     {/* **NEW:** Added Created and Modified Dates */}
                      <div className="row g-3 mt-3">
                         <div className="col-md-6"><Paper variant="outlined" sx={{ p: 2, height: '100%' }}><Typography variant="overline" color="text.secondary" display="block">Created On</Typography><Typography variant="body1">{formatDate(ticket.createdAt)}</Typography></Paper></div>
                         <div className="col-md-6"><Paper variant="outlined" sx={{ p: 2, height: '100%' }}><Typography variant="overline" color="text.secondary" display="block">Last Modified</Typography><Typography variant="body1">{formatDate(ticket.lastModified)}</Typography></Paper></div>
@@ -200,7 +188,7 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
                                         <Chip label={entry.type} size="small" variant="outlined" color={entry.type === 'Action' ? 'primary' : 'default'} />
                                         <Box sx={{ flexGrow: 1 }} />
-                                        <Typography variant="caption" color="text.secondary" sx={{ml: 2, minWidth: 'fit-content'}}>By {logUser?.displayName || 'Unknown'} on {new Date(entry.timestamp).toLocaleDateString()}</Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ml: 2, minWidth: 'fit-content'}}>By {logUser?.displayName || '...'} on {new Date(entry.timestamp).toLocaleDateString()}</Typography>
                                     </Box>
                                 </AccordionSummary>
                                 <AccordionDetails sx={{ borderTop: '1px solid rgba(0, 0, 0, 0.125)' }}><Box className="prose-mirror-content" dangerouslySetInnerHTML={{ __html: entry.description }}/></AccordionDetails>
@@ -210,15 +198,17 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                 </div>
                 
                 <div className="d-flex justify-content-end gap-2 mt-3">
-                    {/* **FIX 3:** Button is now outlined */}
-                    <Button
-                        variant="outlined"
-                        color="primary"
-                        startIcon={<EditIcon />}
-                        onClick={() => router.push(`/tickets/${ticket.ticketNumber}/edit`)}
-                    >
-                        Edit Ticket
-                    </Button>
+                    {/* The Edit button is also conditionally rendered here for logged-in users */}
+                    {user && (
+                        <Button
+                            variant="outlined"
+                            color="primary"
+                            startIcon={<EditIcon />}
+                            onClick={() => router.push(`/tickets/${ticket.ticketNumber}/edit`)}
+                        >
+                            Edit Ticket
+                        </Button>
+                    )}
                     <Button variant="outlined" onClick={() => router.push('/dashboard')}>
                         Back to Dashboard
                     </Button>
