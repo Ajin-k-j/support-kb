@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { collection, onSnapshot, query, writeBatch, doc, serverTimestamp, Timestamp, setDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, writeBatch, doc, serverTimestamp, Timestamp, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { listenToAllUsers } from '@/lib/users';
 import { TicketData, UserData, InvestigationEntry } from '@/types';
 import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
+import RoleGuard from '@/components/RoleGuard';
 
 // Declare the bootstrap global variable to TypeScript.
 declare const bootstrap: any;
@@ -30,6 +31,7 @@ export default function AdminPage() {
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<TicketData[]>([]);
   const [userMap, setUserMap] = useState<Map<string, UserData>>(new Map());
+  const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
@@ -46,7 +48,7 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<ItemType[]>([]);
   const [editItem, setEditItem] = useState<{ id: string; name: string; type: 'category' | 'logType' } | null>(null);
   const [newName, setNewName] = useState('');
-  const [activeTab, setActiveTab] = useState<'table' | 'logTypes' | 'categories'>('table');
+  const [activeTab, setActiveTab] = useState<'table' | 'logTypes' | 'categories' | 'users'>('table');
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -65,10 +67,9 @@ export default function AdminPage() {
   useEffect(() => {
     const unsubscribeUsers = listenToAllUsers((users) => {
         if (users) {
-            console.log('Users fetched:', users);
+            setAllUsers(users);
             setUserMap(new Map(users.map((u) => [u.uid, u])));
         } else {
-            console.error('Error fetching users: received null or undefined');
             setError('Failed to fetch users');
             setLoading(false);
         }
@@ -104,7 +105,6 @@ export default function AdminPage() {
             assignedTo: data.assignedTo ?? undefined,
           } as TicketData;
         });
-        console.log('Tickets fetched:', ticketData);
         setTickets(ticketData);
         setFilteredTickets(ticketData);
         setLoading(false);
@@ -162,7 +162,6 @@ export default function AdminPage() {
     }
     if (sortField) {
       result.sort((a, b) => {
-        // FIX: Handle date sorting separately and ensure other fields are strings before comparing.
         if (sortField === 'lastModified') {
           const aDate = a.lastModified ? new Date(a.lastModified).getTime() : 0;
           const bDate = b.lastModified ? new Date(b.lastModified).getTime() : 0;
@@ -172,13 +171,12 @@ export default function AdminPage() {
         const aValue = a[sortField];
         const bValue = b[sortField];
 
-        // Ensure values are strings for localeCompare, skip if they are arrays or objects
         if (typeof aValue === 'string' && typeof bValue === 'string') {
             return sortOrder === 'asc'
             ? aValue.localeCompare(bValue)
             : bValue.localeCompare(aValue);
         }
-        return 0; // Don't sort if the field is not a string
+        return 0;
       });
     }
     setFilteredTickets(result);
@@ -343,6 +341,16 @@ export default function AdminPage() {
     }
   };
 
+  const handleRoleChange = async (userId: string, newRole: 'hduser' | 'admin' | null) => {
+    try {
+      await updateDoc(doc(db, 'users', userId), { role: newRole });
+      alert('User role updated successfully.');
+    } catch (error) {
+      console.error('Error updating user role:', error);
+      alert('Failed to update user role.');
+    }
+  };
+
   const getStatusClass = (status: string) => {
     switch (status) {
       case 'Open':
@@ -372,322 +380,381 @@ export default function AdminPage() {
   }
 
   return (
-    <div className="container py-2">
-      <style jsx global>{`
-        .ticket-table { width: 100%; border-collapse: collapse; }
-        .ticket-table th, .ticket-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
-        .ticket-table th { background-color: #f8f9fa; font-weight: 600; }
-        .ticket-table tbody tr:hover { background-color: #f1f3f5; }
-        .badge { padding: 4px 8px; border-radius: 12px; }
-        .action-links a { margin-right: 8px; color: #4f46e5; text-decoration: none; }
-        .action-links a:hover { text-decoration: underline; }
-        .filter-group { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
-      `}</style>
-      <h2 className="mb-3 text-gray-800">Ticket Management</h2>
+    <RoleGuard requireAdmin={true}>
+      <div className="container py-2">
+        <style jsx global>{`
+          .ticket-table { width: 100%; border-collapse: collapse; }
+          .ticket-table th, .ticket-table td { border: 1px solid #dee2e6; padding: 8px; text-align: left; }
+          .ticket-table th { background-color: #f8f9fa; font-weight: 600; }
+          .ticket-table tbody tr:hover { background-color: #f1f3f5; }
+          .badge { padding: 4px 8px; border-radius: 12px; }
+          .action-links a { margin-right: 8px; color: #4f46e5; text-decoration: none; }
+          .action-links a:hover { text-decoration: underline; }
+          .filter-group { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+        `}</style>
+        <h2 className="mb-3 text-gray-800">Admin Panel</h2>
 
-      {/* Tab Navigation */}
-      <div className="mb-3">
-        <div className="btn-group" role="group">
-          <button
-            className={`btn ${activeTab === 'table' ? 'btn-primary' : 'btn-outline-primary'} rounded-start`}
-            onClick={() => setActiveTab('table')}
-          >
-            Tickets
-          </button>
-          <button
-            className={`btn ${activeTab === 'logTypes' ? 'btn-primary' : 'btn-outline-primary'}`}
-            onClick={() => setActiveTab('logTypes')}
-          >
-            Log Types
-          </button>
-          <button
-            className={`btn ${activeTab === 'categories' ? 'btn-primary' : 'btn-outline-primary'} rounded-end`}
-            onClick={() => setActiveTab('categories')}
-          >
-            Categories
-          </button>
+        {/* Tab Navigation */}
+        <div className="mb-3">
+          <div className="btn-group" role="group">
+            <button
+              className={`btn ${activeTab === 'table' ? 'btn-primary' : 'btn-outline-primary'} rounded-start`}
+              onClick={() => setActiveTab('table')}
+            >
+              Tickets
+            </button>
+            <button
+              className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => setActiveTab('users')}
+            >
+              Users
+              {allUsers.filter(u => !u.role).length > 0 && (
+                <span className="badge bg-danger ms-2 rounded-pill">
+                  {allUsers.filter(u => !u.role).length}
+                </span>
+              )}
+            </button>
+            <button
+              className={`btn ${activeTab === 'logTypes' ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => setActiveTab('logTypes')}
+            >
+              Log Types
+            </button>
+            <button
+              className={`btn ${activeTab === 'categories' ? 'btn-primary' : 'btn-outline-primary'} rounded-end`}
+              onClick={() => setActiveTab('categories')}
+            >
+              Categories
+            </button>
+          </div>
         </div>
-      </div>
 
-      {/* Edit Modal */}
-      <div ref={modalRef} className="modal fade" id="editModal" tabIndex={-1} aria-labelledby="editModalLabel" aria-hidden="true">
-        <div className="modal-dialog">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h1 className="modal-title fs-5" id="editModalLabel">Edit {editItem?.type === 'category' ? 'Category' : 'Log Type'}</h1>
-              <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Close" onClick={() => setEditItem(null)}></button>
-            </div>
-            <div className="modal-body">
-              <input
-                type="text"
-                className="form-control"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-              />
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-secondary" data-bs-dismiss="modal" onClick={() => setEditItem(null)}>Close</button>
-              <button type="button" className="btn btn-primary" onClick={handleSaveEdit}>Save changes</button>
+        {/* Edit Modal */}
+        <div ref={modalRef} className="modal fade" id="editModal" tabIndex={-1} aria-labelledby="editModalLabel" aria-hidden="true">
+          <div className="modal-dialog">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h1 className="modal-title fs-5" id="editModalLabel">Edit {editItem?.type === 'category' ? 'Category' : 'Log Type'}</h1>
+                <button type="button" className="btn-close" data-bs-dismiss="modal" aria-label="Close" onClick={() => setEditItem(null)}></button>
+              </div>
+              <div className="modal-body">
+                <input
+                  type="text"
+                  className="form-control"
+                  value={newName}
+                  onChange={(e) => setNewName(e.target.value)}
+                />
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" data-bs-dismiss="modal" onClick={() => setEditItem(null)}>Close</button>
+                <button type="button" className="btn btn-primary" onClick={handleSaveEdit}>Save changes</button>
+              </div>
             </div>
           </div>
         </div>
-      </div>
 
-      {/* Tickets Tab */}
-      {activeTab === 'table' && (
-        <div className="card p-3 shadow-sm border-0 rounded-lg">
-          {/* Filters and Sorting */}
-          <div className="mb-3">
-            <h5 className="mb-2 text-gray-700">Filters & Sorting</h5>
-            <div className="filter-group">
+        {/* Tickets Tab */}
+        {activeTab === 'table' && (
+          <div className="card p-3 shadow-sm border-0 rounded-lg">
+            {/* Filters and Sorting */}
+            <div className="mb-3">
+              <h5 className="mb-2 text-gray-700">Filters & Sorting</h5>
+              <div className="filter-group">
+                <input
+                  type="text"
+                  className="form-control rounded-lg"
+                  placeholder="Search by Ticket ID or Title"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  style={{ maxWidth: '200px' }}
+                />
+                <select
+                  className="form-select rounded-lg"
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  style={{ maxWidth: '150px' }}
+                >
+                  <option value="">All Statuses</option>
+                  <option value="Open">Open</option>
+                  <option value="InProgress">In Progress</option>
+                  <option value="Pending">Pending</option>
+                  <option value="Resolved">Resolved</option>
+                  <option value="Closed">Closed</option>
+                </select>
+                <select
+                  className="form-select rounded-lg"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  style={{ maxWidth: '150px' }}
+                >
+                  <option value="">All Categories</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.name}>{cat.name}</option>
+                  ))}
+                </select>
+                <select
+                  className="form-select rounded-lg"
+                  value={impactFilter}
+                  onChange={(e) => setImpactFilter(e.target.value)}
+                  style={{ maxWidth: '150px' }}
+                >
+                  <option value="">All Impacts</option>
+                  <option value="Low">Low</option>
+                  <option value="Medium">Medium</option>
+                  <option value="High">High</option>
+                  <option value="Critical">Critical</option>
+                </select>
+                <select
+                  className="form-select rounded-lg"
+                  value={sortField}
+                  onChange={(e) => setSortField(e.target.value as keyof TicketData)}
+                  style={{ maxWidth: '150px' }}
+                >
+                  <option value="">Sort By</option>
+                  <option value="ticketNumber">Ticket ID</option>
+                  <option value="title">Title</option>
+                  <option value="status">Status</option>
+                  <option value="category">Category</option>
+                  <option value="lastModified">Last Modified</option>
+                  <option value="businessImpact">Business Impact</option>
+                </select>
+                <select
+                  className="form-select rounded-lg"
+                  value={sortOrder}
+                  onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
+                  style={{ maxWidth: '100px' }}
+                >
+                  <option value="asc">Ascending</option>
+                  <option value="desc">Descending</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="mb-3 d-flex flex-wrap gap-2 align-items-center">
+              <button
+                className="btn btn-secondary rounded-lg"
+                onClick={handleDownloadCSV}
+                disabled={selectedTickets.length === 0}
+              >
+                Export CSV
+              </button>
+              <button
+                className="btn btn-secondary rounded-lg"
+                onClick={handleDownloadJSON}
+                disabled={selectedTickets.length === 0}
+              >
+                Export JSON
+              </button>
+              <button
+                className="btn btn-danger rounded-lg"
+                onClick={handleDeleteSelected}
+                disabled={selectedTickets.length === 0}
+              >
+                Delete Selected
+              </button>
+              <label className="btn btn-outline-primary rounded-lg">
+                Upload JSON
+                <input
+                  type="file"
+                  accept=".json"
+                  onChange={handleFileUpload}
+                  style={{ display: 'none' }}
+                />
+              </label>
+            </div>
+
+            {/* Ticket Table */}
+            <table className="ticket-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '50px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedTickets.length === filteredTickets.length && filteredTickets.length > 0}
+                      onChange={() =>
+                        setSelectedTickets(
+                          selectedTickets.length === filteredTickets.length ? [] : filteredTickets.map((t) => t.id)
+                        )
+                      }
+                    />
+                  </th>
+                  <th>Ticket ID</th>
+                  <th>Title</th>
+                  <th>Status</th>
+                  <th>Category</th>
+                  <th>Assigned To</th>
+                  <th>Last Modified</th>
+                  <th>Business Impact</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTickets.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="text-center">
+                      No tickets found
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTickets.map((ticket) => (
+                    <tr key={ticket.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedTickets.includes(ticket.id)}
+                          onChange={() => handleCheckboxChange(ticket.id)}
+                        />
+                      </td>
+                      <td>
+                        <a href={`/tickets/${ticket.ticketNumber}`} className="text-decoration-none">
+                          {ticket.ticketNumber || 'N/A'}
+                        </a>
+                      </td>
+                      <td>{ticket.title}</td>
+                      <td>
+                        <span className={getStatusClass(ticket.status)}>{ticket.status}</span>
+                      </td>
+                      <td>{ticket.category}</td>
+                      <td>
+                        {(ticket.assignedUsers || [])
+                          .map((uid) => userMap.get(uid)?.displayName || uid)
+                          .join(', ')}
+                      </td>
+                      <td>{ticket.lastModified ? new Date(ticket.lastModified).toLocaleString() : ''}</td>
+                      <td>{ticket.businessImpact}</td>
+                      <td className="action-links">
+                        <a href={`/tickets/${ticket.ticketNumber}`} title="View Ticket">
+                          View
+                        </a>
+                        <a href={`/tickets/${ticket.ticketNumber}/edit`} title="Edit Ticket">
+                          Edit
+                        </a>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Users Tab */}
+        {activeTab === 'users' && (
+          <div className="card p-3 shadow-sm border-0 rounded-lg">
+            <h5 className="mb-3 text-gray-700">User Management</h5>
+            <table className="ticket-table">
+              <thead>
+                <tr>
+                  <th>Display Name</th>
+                  <th>Email</th>
+                  <th>Current Role</th>
+                  <th>Assign Role</th>
+                </tr>
+              </thead>
+              <tbody>
+                {allUsers.map((u) => (
+                  <tr key={u.uid}>
+                    <td>{u.displayName || 'N/A'}</td>
+                    <td>{u.email}</td>
+                    <td>
+                      {!u.role ? (
+                        <span className="badge bg-secondary">Pending Approval</span>
+                      ) : u.role === 'admin' ? (
+                        <span className="badge bg-danger">Admin</span>
+                      ) : (
+                        <span className="badge bg-primary">HD User</span>
+                      )}
+                    </td>
+                    <td>
+                      <select
+                        className="form-select form-select-sm"
+                        style={{ maxWidth: '150px' }}
+                        value={u.role || ''}
+                        onChange={(e) => handleRoleChange(u.uid, e.target.value as 'hduser' | 'admin' | null || null)}
+                      >
+                        <option value="">Pending (Null)</option>
+                        <option value="hduser">HD User</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Log Types Tab */}
+        {activeTab === 'logTypes' && (
+          <div className="card p-3 shadow-sm border-0 rounded-lg">
+            <h5 className="mb-2 text-gray-700">Manage Investigation Log Types</h5>
+            <div className="d-flex gap-2 mb-3">
               <input
                 type="text"
                 className="form-control rounded-lg"
-                placeholder="Search by Ticket ID or Title"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="New Log Type"
+                value={newLogType}
+                onChange={(e) => setNewLogType(e.target.value)}
                 style={{ maxWidth: '200px' }}
               />
-              <select
-                className="form-select rounded-lg"
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                style={{ maxWidth: '150px' }}
-              >
-                <option value="">All Statuses</option>
-                <option value="Open">Open</option>
-                <option value="InProgress">In Progress</option>
-                <option value="Pending">Pending</option>
-                <option value="Resolved">Resolved</option>
-                <option value="Closed">Closed</option>
-              </select>
-              <select
-                className="form-select rounded-lg"
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                style={{ maxWidth: '150px' }}
-              >
-                <option value="">All Categories</option>
-                {categories.map((cat) => (
-                  <option key={cat.id} value={cat.name}>{cat.name}</option>
-                ))}
-              </select>
-              <select
-                className="form-select rounded-lg"
-                value={impactFilter}
-                onChange={(e) => setImpactFilter(e.target.value)}
-                style={{ maxWidth: '150px' }}
-              >
-                <option value="">All Impacts</option>
-                <option value="Low">Low</option>
-                <option value="Medium">Medium</option>
-                <option value="High">High</option>
-                <option value="Critical">Critical</option>
-              </select>
-              <select
-                className="form-select rounded-lg"
-                value={sortField}
-                onChange={(e) => setSortField(e.target.value as keyof TicketData)}
-                style={{ maxWidth: '150px' }}
-              >
-                <option value="">Sort By</option>
-                <option value="ticketNumber">Ticket ID</option>
-                <option value="title">Title</option>
-                <option value="status">Status</option>
-                <option value="category">Category</option>
-                <option value="lastModified">Last Modified</option>
-                <option value="businessImpact">Business Impact</option>
-              </select>
-              <select
-                className="form-select rounded-lg"
-                value={sortOrder}
-                onChange={(e) => setSortOrder(e.target.value as 'asc' | 'desc')}
-                style={{ maxWidth: '100px' }}
-              >
-                <option value="asc">Ascending</option>
-                <option value="desc">Descending</option>
-              </select>
+              <button className="btn btn-primary rounded-lg" onClick={handleAddLogType}>
+                Add Log Type
+              </button>
             </div>
+            <ul className="list-group">
+              {logTypes.map((item) => (
+                <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
+                  {item.name}
+                  <div>
+                    <button className="btn btn-sm btn-primary me-2" onClick={() => setEditItem({ id: item.id, name: item.name, type: 'logType' })}>
+                      Edit
+                    </button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteItem(item.id, 'logType')}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
+        )}
 
-          {/* Actions */}
-          <div className="mb-3 d-flex flex-wrap gap-2 align-items-center">
-            <button
-              className="btn btn-secondary rounded-lg"
-              onClick={handleDownloadCSV}
-              disabled={selectedTickets.length === 0}
-            >
-              Export CSV
-            </button>
-            <button
-              className="btn btn-secondary rounded-lg"
-              onClick={handleDownloadJSON}
-              disabled={selectedTickets.length === 0}
-            >
-              Export JSON
-            </button>
-            <button
-              className="btn btn-danger rounded-lg"
-              onClick={handleDeleteSelected}
-              disabled={selectedTickets.length === 0}
-            >
-              Delete Selected
-            </button>
-            <label className="btn btn-outline-primary rounded-lg">
-              Upload JSON
+        {/* Categories Tab */}
+        {activeTab === 'categories' && (
+          <div className="card p-3 shadow-sm border-0 rounded-lg">
+            <h5 className="mb-2 text-gray-700">Manage Ticket Categories</h5>
+            <div className="d-flex gap-2 mb-3">
               <input
-                type="file"
-                accept=".json"
-                onChange={handleFileUpload}
-                style={{ display: 'none' }}
+                type="text"
+                className="form-control rounded-lg"
+                placeholder="New Category"
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                style={{ maxWidth: '200px' }}
               />
-            </label>
+              <button className="btn btn-primary rounded-lg" onClick={handleAddCategory}>
+                Add Category
+              </button>
+            </div>
+            <ul className="list-group">
+              {categories.map((item) => (
+                <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
+                  {item.name}
+                  <div>
+                    <button className="btn btn-sm btn-primary me-2" onClick={() => setEditItem({ id: item.id, name: item.name, type: 'category' })}>
+                      Edit
+                    </button>
+                    <button className="btn btn-sm btn-danger" onClick={() => handleDeleteItem(item.id, 'category')}>
+                      Delete
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
           </div>
-
-          {/* Ticket Table */}
-          <table className="ticket-table">
-            <thead>
-              <tr>
-                <th style={{ width: '50px' }}>
-                  <input
-                    type="checkbox"
-                    checked={selectedTickets.length === filteredTickets.length && filteredTickets.length > 0}
-                    onChange={() =>
-                      setSelectedTickets(
-                        selectedTickets.length === filteredTickets.length ? [] : filteredTickets.map((t) => t.id)
-                      )
-                    }
-                  />
-                </th>
-                <th>Ticket ID</th>
-                <th>Title</th>
-                <th>Status</th>
-                <th>Category</th>
-                <th>Assigned To</th>
-                <th>Last Modified</th>
-                <th>Business Impact</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTickets.length === 0 ? (
-                <tr>
-                  <td colSpan={9} className="text-center">
-                    No tickets found
-                  </td>
-                </tr>
-              ) : (
-                filteredTickets.map((ticket) => (
-                  <tr key={ticket.id}>
-                    <td>
-                      <input
-                        type="checkbox"
-                        checked={selectedTickets.includes(ticket.id)}
-                        onChange={() => handleCheckboxChange(ticket.id)}
-                      />
-                    </td>
-                    <td>
-                      <a href={`/tickets/${ticket.id}/edit`} className="text-decoration-none">
-                        {ticket.ticketNumber || 'N/A'}
-                      </a>
-                    </td>
-                    <td>{ticket.title}</td>
-                    <td>
-                      <span className={getStatusClass(ticket.status)}>{ticket.status}</span>
-                    </td>
-                    <td>{ticket.category}</td>
-                    <td>
-                      {(ticket.assignedUsers || [])
-                        .map((uid) => userMap.get(uid)?.displayName || uid)
-                        .join(', ')}
-                    </td>
-                    <td>{ticket.lastModified ? new Date(ticket.lastModified).toLocaleString() : ''}</td>
-                    <td>{ticket.businessImpact}</td>
-                    <td className="action-links">
-                      <a href={`/tickets/${ticket.ticketNumber}`} title="View Ticket">
-                        View
-                      </a>
-                      <a href={`/tickets/${ticket.ticketNumber}/edit`} title="Edit Ticket">
-                        Edit
-                      </a>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {/* Log Types Tab */}
-      {activeTab === 'logTypes' && (
-        <div className="card p-3 shadow-sm border-0 rounded-lg">
-          <h5 className="mb-2 text-gray-700">Manage Investigation Log Types</h5>
-          <div className="d-flex gap-2 mb-3">
-            <input
-              type="text"
-              className="form-control rounded-lg"
-              placeholder="New Log Type"
-              value={newLogType}
-              onChange={(e) => setNewLogType(e.target.value)}
-              style={{ maxWidth: '200px' }}
-            />
-            <button className="btn btn-primary rounded-lg" onClick={handleAddLogType}>
-              Add Log Type
-            </button>
-          </div>
-          <ul className="list-group">
-            {logTypes.map((item) => (
-              <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
-                {item.name}
-                <div>
-                  <button className="btn btn-sm btn-primary me-2" onClick={() => setEditItem({ id: item.id, name: item.name, type: 'logType' })}>
-                    Edit
-                  </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteItem(item.id, 'logType')}>
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-
-      {/* Categories Tab */}
-      {activeTab === 'categories' && (
-        <div className="card p-3 shadow-sm border-0 rounded-lg">
-          <h5 className="mb-2 text-gray-700">Manage Ticket Categories</h5>
-          <div className="d-flex gap-2 mb-3">
-            <input
-              type="text"
-              className="form-control rounded-lg"
-              placeholder="New Category"
-              value={newCategory}
-              onChange={(e) => setNewCategory(e.target.value)}
-              style={{ maxWidth: '200px' }}
-            />
-            <button className="btn btn-primary rounded-lg" onClick={handleAddCategory}>
-              Add Category
-            </button>
-          </div>
-          <ul className="list-group">
-            {categories.map((item) => (
-              <li key={item.id} className="list-group-item d-flex justify-content-between align-items-center">
-                {item.name}
-                <div>
-                  <button className="btn btn-sm btn-primary me-2" onClick={() => setEditItem({ id: item.id, name: item.name, type: 'category' })}>
-                    Edit
-                  </button>
-                  <button className="btn btn-sm btn-danger" onClick={() => handleDeleteItem(item.id, 'category')}>
-                    Delete
-                  </button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
-    </div>
+        )}
+      </div>
+    </RoleGuard>
   );
 }

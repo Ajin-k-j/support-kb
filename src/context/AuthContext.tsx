@@ -34,7 +34,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             displayName: firebaseUser.displayName || 'User',
             email: firebaseUser.email || '',
             photoURL: firebaseUser.photoURL || '',
-            isAdmin: false,
+            isAdmin: false, // Keeping for backward compatibility
+            role: null, // New users wait for admin approval
           };
           await setDoc(userRef, newUserData);
           setUserData(newUserData);

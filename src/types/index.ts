@@ -3,17 +3,17 @@ export interface UserData {
   displayName: string;
   email: string;
   photoURL?: string;
-  isAdmin: boolean;
+  isAdmin: boolean; // Keeping for backward compatibility temporarily
+  role?: 'hduser' | 'admin' | null;
 }
 
 export interface TicketData {
   id: string;
   ticketNumber: string;
   title: string;
-  // FIX: Made these fields optional to match the form validation schema.
-  // This resolves the type mismatch when calling `createTicket`.
   supportDescription?: string;
   customerDescription?: string;
+  aiSummary?: string;
   status: 'Open' | 'InProgress' | 'Pending' | 'Resolved' | 'Closed';
   businessImpact: 'Low' | 'Medium' | 'High' | 'Critical';
   category: string;
@@ -30,4 +30,6 @@ export interface InvestigationEntry {
   description: string;
   timestamp: string;
   userId: string;
+  userName?: string;
+  userEmail?: string;
 }

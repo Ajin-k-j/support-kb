@@ -13,6 +13,8 @@ import { Box, Typography, Button, Paper } from '@mui/material';
 import { Add as AddIcon } from '@mui/icons-material';
 import Link from 'next/link';
 
+import RoleGuard from '@/components/RoleGuard';
+
 export default function Dashboard() {
   const { user, loading } = useAuth();
   const router = useRouter();
@@ -23,12 +25,6 @@ export default function Dashboard() {
   useEffect(() => {
     setIsClient(true);
   }, []);
-
-  useEffect(() => {
-    if (!loading && !user) {
-      router.push('/login');
-    }
-  }, [user, loading, router]);
 
   useEffect(() => {
     if (user) {
@@ -49,21 +45,22 @@ export default function Dashboard() {
   if (!user) return null;
 
   return (
-    // CHANGE: Removed maxWidth and mx properties to make the layout full-width.
-    <Box sx={{ p: 3 }}>
-      <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h4" component="h1">
-            My Ticket Entries
-          </Typography>
-          <Link href="/tickets/new" passHref>
-            <Button variant="contained" startIcon={<AddIcon />}>
-              Create New Ticket
-            </Button>
-          </Link>
-        </Box>
-        <TicketTable tickets={tickets} allUsers={allUsers} />
-      </Paper>
-    </Box>
+    <RoleGuard>
+      <Box sx={{ p: 3 }}>
+        <Paper elevation={2} sx={{ p: 3, borderRadius: 2 }}>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+            <Typography variant="h4" component="h1">
+              My Ticket Entries
+            </Typography>
+            <Link href="/tickets/new" passHref>
+              <Button variant="contained" startIcon={<AddIcon />}>
+                Create New Ticket
+              </Button>
+            </Link>
+          </Box>
+          <TicketTable tickets={tickets} allUsers={allUsers} />
+        </Paper>
+      </Box>
+    </RoleGuard>
   );
 }

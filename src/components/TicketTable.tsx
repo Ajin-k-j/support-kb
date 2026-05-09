@@ -57,18 +57,22 @@ function TicketTableComponent({ tickets, allUsers }: TicketTableProps) {
       sortable: false,
       align: 'center',
       headerAlign: 'center',
-      renderCell: (params) => (
-        <AvatarGroup max={4} sx={{ justifyContent: 'center', '& .MuiAvatar-root': { width: 28, height: 28, fontSize: '0.8rem' } }}>
-          {params.value?.map((uid: string) => {
-            const user = userMap.get(uid);
-            return (
-              <Tooltip title={user?.displayName || 'Unknown'} key={uid}>
-                <Avatar src={user?.photoURL}>{user?.displayName?.charAt(0)}</Avatar>
-              </Tooltip>
-            );
-          })}
-        </AvatarGroup>
-      ),
+      renderCell: (params) => {
+        const users = params.value || [];
+        const displayUsers = users.slice(0, 3);
+        return (
+          <AvatarGroup total={users.length} max={4} sx={{ justifyContent: 'center', '& .MuiAvatar-root': { width: 28, height: 28, fontSize: '0.8rem' } }}>
+            {displayUsers.map((uid: string) => {
+              const user = userMap.get(uid);
+              return (
+                <Tooltip title={user?.displayName || 'Unknown'} key={uid}>
+                  <Avatar src={user?.photoURL}>{user?.displayName?.charAt(0)}</Avatar>
+                </Tooltip>
+              );
+            })}
+          </AvatarGroup>
+        );
+      },
     },
     {
       field: 'lastModified',

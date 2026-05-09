@@ -107,13 +107,13 @@ export default function Nav() {
                                     },
                                 }}
                             >
-                                {userData.isAdmin && (
+                                {userData.role === 'admin' && (
                                     <MenuItem onClick={() => { handleClose(); router.push('/admin'); }}>
                                         <ListItemIcon><AdminPanelSettingsIcon fontSize="small" /></ListItemIcon>
                                         Admin Panel
                                     </MenuItem>
                                 )}
-                                {userData.isAdmin && <Divider />}
+                                {userData.role === 'admin' && <Divider />}
                                 <MenuItem onClick={handleLogout}>
                                     <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
                                     Sign Out

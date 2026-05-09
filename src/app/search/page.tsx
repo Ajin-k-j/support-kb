@@ -49,6 +49,8 @@ const stopWords = new Set([
 ]);
 
 
+import RoleGuard from '@/components/RoleGuard';
+
 export default function SearchPage() {
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
@@ -70,9 +72,6 @@ export default function SearchPage() {
 
     // Authentication and initial data fetching (no changes here)
     useEffect(() => {
-        if (!authLoading && !user) {
-            router.push('/login');
-        }
         if (user) {
             const unsubTickets = onSnapshot(query(collection(db, 'ticketResolutions')), snapshot => {
                 const ticketsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TicketData));
@@ -117,6 +116,7 @@ export default function SearchPage() {
                     { name: 'customerDescription', weight: 1.0 },
                     { name: 'supportDescription', weight: 1.0 },
                     { name: 'title', weight: 0.8 },
+                    { name: 'aiSummary', weight: 0.8 },
                     { name: 'investigationLog.description', weight: 0.7 },
                     { name: 'ticketNumber', weight: 0.5 },
                 ],
@@ -167,6 +167,7 @@ export default function SearchPage() {
     }
 
     return (
+      <RoleGuard>
         <Box sx={{ p: { xs: 2, md: 4 }, maxWidth: '1200px', mx: 'auto' }}>
             <Typography variant="h4" component="h1" sx={{ mb: 3, fontWeight: 'bold' }}>
                 Knowledge Search
@@ -230,5 +231,6 @@ export default function SearchPage() {
                 )}
             </Box>
         </Box>
+      </RoleGuard>
     );
 }

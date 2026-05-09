@@ -18,10 +18,11 @@ import {
     Edit as EditIcon, Link as LinkIcon, ExpandMore as ExpandMoreIcon
 } from '@mui/icons-material';
 
+import RoleGuard from '@/components/RoleGuard';
+
 export default function TicketView({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
 
-    // useAuth is still needed to conditionally show the "Edit" button
     const { user, loading: authLoading } = useAuth();
     const router = useRouter();
     const [ticket, setTicket] = useState<TicketData | null>(null);
@@ -29,8 +30,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
     const [error, setError] = useState<string | null>(null);
     const [expandedAccordions, setExpandedAccordions] = useState<string[]>([]);
 
-    // **CHANGE 1:** This effect now ONLY fetches user data if a user is logged in.
-    // It no longer blocks the page for non-logged-in users.
     useEffect(() => {
         if (user) {
             const unsubscribe = listenToAllUsers(setAllUsers);
@@ -38,7 +37,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
         }
     }, [user]);
     
-    // Set the initially expanded accordion when the ticket data loads
     useEffect(() => {
         if (ticket?.investigationLog && ticket.investigationLog.length > 0) {
             const newestEntryTimestamp = ticket.investigationLog[ticket.investigationLog.length - 1].timestamp;
@@ -46,8 +44,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
         }
     }, [ticket]); 
 
-    // **CHANGE 2:** This effect now fetches the ticket data for EVERYONE.
-    // The dependency on `user` has been removed.
     useEffect(() => {
         if (id) {
             const ticketsRef = collection(db, 'ticketResolutions');
@@ -107,14 +103,14 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
         return isNaN(date.getTime()) ? 'Invalid Date' : date.toLocaleString();
     };
 
-
     if (authLoading || (!ticket && !error)) {
         return <Box sx={{ display: 'flex', justifyContent: 'center', p: 5 }}><Loader /></Box>;
     }
     if (error) return <Typography color="error" sx={{ textAlign: 'center', p: 5 }}>{error}</Typography>;
-    if (!ticket) return null; // Should not happen if error case is handled, but good for safety
+    if (!ticket) return null;
 
     return (
+      <RoleGuard>
         <div className="container py-2">
              <style jsx global>{`
                 .prose-mirror-content p { margin: 0; line-height: 1.5; }
@@ -124,7 +120,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
             `}</style>
             <div className="d-flex justify-content-between align-items-center mb-3">
                  <h2 className="mb-0 text-gray-800">View Ticket</h2>
-                 {/* **CHANGE 3:** The Edit button is now only shown to logged-in users */}
                  {user && (
                     <Button
                         variant="contained"
@@ -152,6 +147,22 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                         <div className="col-md-6"><Paper variant="outlined" sx={{ p: 2, height: '100%' }}><Typography variant="overline" color="text.secondary" display="block">Created On</Typography><Typography variant="body1">{formatDate(ticket.createdAt)}</Typography></Paper></div>
                         <div className="col-md-6"><Paper variant="outlined" sx={{ p: 2, height: '100%' }}><Typography variant="overline" color="text.secondary" display="block">Last Modified</Typography><Typography variant="body1">{formatDate(ticket.lastModified)}</Typography></Paper></div>
                      </div>
+
+                     {ticket.aiSummary && (
+                         <div className="mt-4">
+                             <div className="card border-0 shadow-sm bg-indigo-50" style={{ backgroundColor: '#eef2ff' }}>
+                                 <div className="card-body p-4">
+                                     <div className="d-flex align-items-center mb-2">
+                                         <svg className="text-indigo-600 me-2" style={{ width: '24px', height: '24px' }} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                                         </svg>
+                                         <h5 className="mb-0 text-indigo-900 fw-bold">AI Summary</h5>
+                                     </div>
+                                     <p className="mb-0 text-indigo-800" style={{ whiteSpace: 'pre-wrap' }}>{ticket.aiSummary}</p>
+                                 </div>
+                             </div>
+                         </div>
+                     )}
                      <div className="mt-4"><label className="form-label text-gray-600 fw-bold">Customer Description</label><div className="border rounded p-3 bg-white prose-mirror-content" dangerouslySetInnerHTML={{ __html: ticket.customerDescription || '<em>No description provided.</em>' }} /></div>
                      <div className="mt-3"><label className="form-label text-gray-600 fw-bold">Support Description</label><div className="border rounded p-3 bg-white prose-mirror-content" dangerouslySetInnerHTML={{ __html: ticket.supportDescription || '<em>No description provided.</em>' }} /></div>
                 </div>
@@ -159,10 +170,13 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                 <div className="mb-4 border-bottom pb-3">
                     <h3 className="mb-3 text-gray-700 font-weight-semibold">Collaboration</h3>
                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                         {ticket.assignedUsers.map(uid => {
+                         {ticket.assignedUsers.slice(0, 10).map(uid => {
                              const assignedUser = allUsers.find(u => u.uid === uid);
                              return (<Tooltip title={assignedUser?.displayName || 'Unknown User'} key={uid}><Chip avatar={<Avatar src={assignedUser?.photoURL}>{assignedUser?.displayName?.charAt(0)}</Avatar>} label={assignedUser?.displayName || 'Unknown'} variant="outlined" /></Tooltip>);
                          })}
+                         {ticket.assignedUsers.length > 10 && (
+                             <Chip label={`+${ticket.assignedUsers.length - 10} more`} variant="outlined" />
+                         )}
                      </Box>
                 </div>
 
@@ -188,7 +202,22 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, width: '100%' }}>
                                         <Chip label={entry.type} size="small" variant="outlined" color={entry.type === 'Action' ? 'primary' : 'default'} />
                                         <Box sx={{ flexGrow: 1 }} />
-                                        <Typography variant="caption" color="text.secondary" sx={{ml: 2, minWidth: 'fit-content'}}>By {logUser?.displayName || '...'} on {new Date(entry.timestamp).toLocaleDateString()}</Typography>
+                                        <Typography variant="caption" color="text.secondary" sx={{ml: 2, minWidth: 'fit-content'}}>By {entry.userName || logUser?.displayName || '...'} on {new Date(entry.timestamp).toLocaleDateString()}</Typography>
+                                        <Button 
+                                            size="small" 
+                                            variant="outlined" 
+                                            color="inherit" 
+                                            sx={{ ml: 2, minWidth: 'auto', p: '2px 8px' }}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                const tempDiv = document.createElement("div");
+                                                tempDiv.innerHTML = entry.description;
+                                                navigator.clipboard.writeText(tempDiv.innerText || tempDiv.textContent || "");
+                                            }}
+                                            title="Copy log text"
+                                        >
+                                            Copy
+                                        </Button>
                                     </Box>
                                 </AccordionSummary>
                                 <AccordionDetails sx={{ borderTop: '1px solid rgba(0, 0, 0, 0.125)' }}><Box className="prose-mirror-content" dangerouslySetInnerHTML={{ __html: entry.description }}/></AccordionDetails>
@@ -198,7 +227,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                 </div>
                 
                 <div className="d-flex justify-content-end gap-2 mt-3">
-                    {/* The Edit button is also conditionally rendered here for logged-in users */}
                     {user && (
                         <Button
                             variant="outlined"
@@ -215,5 +243,6 @@ export default function TicketView({ params }: { params: Promise<{ id: string }>
                 </div>
             </div>
         </div>
+      </RoleGuard>
     );
 }

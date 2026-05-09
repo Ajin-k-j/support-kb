@@ -5,7 +5,7 @@ import { TicketData } from '@/types';
 
 export function listenToUserTickets(userId: string, callback: (tickets: TicketData[]) => void): Unsubscribe {
   const ticketsRef = collection(db, 'ticketResolutions');
-  const q = query(ticketsRef, where('assignedTo', '==', userId));
+  const q = query(ticketsRef, where('assignedUsers', 'array-contains', userId));
   return onSnapshot(q, (snapshot) => {
     const tickets: TicketData[] = [];
     snapshot.forEach((doc) => {
@@ -13,8 +13,8 @@ export function listenToUserTickets(userId: string, callback: (tickets: TicketDa
       tickets.push({
         id: doc.id,
         ...data,
-        createdAt: data.createdAt || new Date().toISOString(),
-        lastModified: data.lastModified || new Date().toISOString(),
+        createdAt: data.createdAt ? (data.createdAt.toDate ? data.createdAt.toDate().toISOString() : data.createdAt) : new Date().toISOString(),
+        lastModified: data.lastModified ? (data.lastModified.toDate ? data.lastModified.toDate().toISOString() : data.lastModified) : new Date().toISOString(),
       } as TicketData);
     });
     callback(tickets);
