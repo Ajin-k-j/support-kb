@@ -12,7 +12,8 @@ import {
 } from '@mui/material';
 import {
     Search as SearchIcon, AdminPanelSettings as AdminPanelSettingsIcon,
-    Logout as LogoutIcon, ArrowDropDown as ArrowDropDownIcon
+    Logout as LogoutIcon, ArrowDropDown as ArrowDropDownIcon,
+    Home as HomeIcon, Dashboard as DashboardIcon, MenuBook as DocsIcon
 } from '@mui/icons-material';
 
 // A custom SVG Icon for your app logo
@@ -51,8 +52,7 @@ export default function Nav() {
                 {/* Left Side: Logo and Title */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
                     <AppLogoIcon />
-                    {/* **FIX 2:** Simplified the href logic. It will be '/' on the server and update on the client if the user is logged in. */}
-                    <Link href={user ? '/dashboard' : '/'} passHref style={{ textDecoration: 'none', color: 'inherit' }}>
+                    <Link href="/" passHref style={{ textDecoration: 'none', color: 'inherit' }}>
                         <Typography variant="h6" component="div" sx={{ fontWeight: 'bold' }}>
                             Support KB
                         </Typography>
@@ -61,6 +61,15 @@ export default function Nav() {
 
                 {/* Right Side: Links and User Profile */}
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                    <Button
+                        variant="text"
+                        color="inherit"
+                        startIcon={<DocsIcon />}
+                        onClick={() => router.push('/docs')}
+                        sx={{ textTransform: 'none', color: 'text.secondary', display: { xs: 'none', sm: 'flex' }, '&:hover': { bgcolor: 'action.hover' } }}
+                    >
+                        Docs
+                    </Button>
                     <Button
                         variant="text"
                         color="inherit"
@@ -107,6 +116,15 @@ export default function Nav() {
                                     },
                                 }}
                             >
+                                <MenuItem onClick={() => { handleClose(); router.push('/'); }}>
+                                    <ListItemIcon><HomeIcon fontSize="small" /></ListItemIcon>
+                                    Home
+                                </MenuItem>
+                                <MenuItem onClick={() => { handleClose(); router.push('/dashboard'); }}>
+                                    <ListItemIcon><DashboardIcon fontSize="small" /></ListItemIcon>
+                                    Dashboard
+                                </MenuItem>
+                                <Divider />
                                 {userData.role === 'admin' && (
                                     <MenuItem onClick={() => { handleClose(); router.push('/admin'); }}>
                                         <ListItemIcon><AdminPanelSettingsIcon fontSize="small" /></ListItemIcon>

@@ -11,7 +11,7 @@ import TicketForm from '@/components/TicketForm';
 import { TicketFormValues } from '@/lib/schemas';
 
 export default function NewTicket() {
-  const { user, loading } = useAuth();
+  const { user, userData, loading } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
