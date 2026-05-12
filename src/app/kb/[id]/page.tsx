@@ -42,6 +42,12 @@ export default function ViewKB({ params }: { params: Promise<{ id: string }> }) 
         <Box sx={{ display: 'flex', gap: 1, mb: 3 }}>
             {kb.tags && kb.tags.map(tag => <Chip key={tag} label={tag} size="small" />)}
         </Box>
+        {kb.createdBy && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1 }}>
+             <Typography variant="body2" color="text.secondary">Created by:</Typography>
+             <Typography variant="body2" fontWeight="bold">{kb.createdBy.displayName}</Typography>
+          </Box>
+        )}
         <Typography variant="overline" color="text.secondary">Content</Typography>
         <Box className="border rounded p-3 mb-4 bg-light">
            <MarkdownRenderer content={kb.content} />

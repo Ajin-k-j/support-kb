@@ -44,6 +44,13 @@ export default function ViewCode({ params }: { params: Promise<{ id: string }> }
             {code.tags && code.tags.map(tag => <Chip key={tag} label={tag} size="small" variant="outlined" />)}
         </Box>
         
+        {code.createdBy && (
+          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3, gap: 1 }}>
+             <Typography variant="body2" color="text.secondary">Created by:</Typography>
+             <Typography variant="body2" fontWeight="bold">{code.createdBy.displayName}</Typography>
+          </Box>
+        )}
+
         {code.useCase && (
             <Box sx={{ mb: 4 }}>
                 <Typography variant="overline" color="text.secondary">Use Case</Typography>

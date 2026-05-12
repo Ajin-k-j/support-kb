@@ -27,7 +27,11 @@ export default function NewCode() {
       await createCodeSnippet({
         ...data,
         tags: data.tags ? data.tags.split(',').map(t => t.trim()).filter(Boolean) : [],
-        creatorId: user.uid,
+        createdBy: {
+          uid: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || 'Unknown User'
+        },
       });
       router.push('/dashboard');
     } catch (err: any) {

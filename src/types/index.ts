@@ -42,7 +42,7 @@ export interface KBData {
   tags: string[];
   createdAt: string;
   updatedAt: string;
-  creatorId?: string;
+  createdBy?: { uid: string; email: string; displayName: string };
 }
 
 export interface CodeSnippetData {
@@ -54,5 +54,5 @@ export interface CodeSnippetData {
   tags: string[];
   createdAt: string;
   updatedAt: string;
-  creatorId?: string;
+  createdBy?: { uid: string; email: string; displayName: string };
 }

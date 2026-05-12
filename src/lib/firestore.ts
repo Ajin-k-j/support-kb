@@ -55,7 +55,7 @@ export async function getAllTicketIds() {
 
 export function listenToUserKBs(userId: string, callback: (kbs: KBData[]) => void): Unsubscribe {
   const kbRef = collection(db, 'knowledgeBase');
-  const q = query(kbRef, where('creatorId', '==', userId));
+  const q = query(kbRef, where('createdBy.uid', '==', userId));
   return onSnapshot(q, (snapshot) => {
     const kbs: KBData[] = [];
     snapshot.forEach((doc) => {
@@ -80,7 +80,7 @@ export function listenToAllKBs(callback: (kbs: KBData[]) => void): Unsubscribe {
 
 export function listenToUserCodeSnippets(userId: string, callback: (codes: CodeSnippetData[]) => void): Unsubscribe {
   const codeRef = collection(db, 'codeSnippets');
-  const q = query(codeRef, where('creatorId', '==', userId));
+  const q = query(codeRef, where('createdBy.uid', '==', userId));
   return onSnapshot(q, (snapshot) => {
     const codes: CodeSnippetData[] = [];
     snapshot.forEach((doc) => {
