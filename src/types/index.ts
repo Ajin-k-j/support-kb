@@ -33,3 +33,26 @@ export interface InvestigationEntry {
   userName?: string;
   userEmail?: string;
 }
+
+export interface KBData {
+  id: string;
+  subject: string;
+  content: string;
+  resolution?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  creatorId?: string;
+}
+
+export interface CodeSnippetData {
+  id: string;
+  subject: string;
+  content: string;
+  language: string;
+  useCase?: string;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+  creatorId?: string;
+}

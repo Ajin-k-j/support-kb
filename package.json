@@ -32,17 +32,21 @@
     "@tiptap/extension-table-row": "^3.2.1",
     "@tiptap/react": "^3.2.1",
     "@tiptap/starter-kit": "^3.2.1",
+    "@types/react-syntax-highlighter": "^15.5.13",
     "bootstrap": "^5.3.3",
     "firebase": "^12.1.0",
     "fuse.js": "^7.1.0",
     "html-react-parser": "^5.2.6",
     "lucide-react": "^0.540.0",
-    "next": "15.5.0",
+    "next": "15.5.18",
     "papaparse": "^5.5.3",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hook-form": "^7.53.0",
-    "tiptap": "^1.32.2",
+    "react-markdown": "^10.1.0",
+    "react-syntax-highlighter": "^16.1.1",
+    "rehype-raw": "^7.0.0",
+    "remark-gfm": "^4.0.1",
     "zod": "^3.23.8"
   },
   "devDependencies": {
@@ -53,7 +57,7 @@
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.5.0",
+    "eslint-config-next": "15.5.18",
     "gh-pages": "^6.3.0",
     "typescript": "^5"
   }

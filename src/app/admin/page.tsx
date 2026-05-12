@@ -4,7 +4,8 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, onSnapshot, query, writeBatch, doc, serverTimestamp, Timestamp, setDoc, deleteDoc, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { listenToAllUsers } from '@/lib/users';
-import { TicketData, UserData, InvestigationEntry } from '@/types';
+import { listenToAllKBs, listenToAllCodeSnippets } from '@/lib/firestore';
+import { TicketData, UserData, InvestigationEntry, KBData, CodeSnippetData } from '@/types';
 import Papa from 'papaparse';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import RoleGuard from '@/components/RoleGuard';
@@ -30,12 +31,16 @@ type ItemType = { id: string; name: string };
 export default function AdminPage() {
   const [tickets, setTickets] = useState<TicketData[]>([]);
   const [filteredTickets, setFilteredTickets] = useState<TicketData[]>([]);
+  const [kbs, setKbs] = useState<KBData[]>([]);
+  const [codes, setCodes] = useState<CodeSnippetData[]>([]);
   const [userMap, setUserMap] = useState<Map<string, UserData>>(new Map());
   const [allUsers, setAllUsers] = useState<UserData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
   const [selectedTickets, setSelectedTickets] = useState<string[]>([]);
+  const [selectedKbs, setSelectedKbs] = useState<string[]>([]);
+  const [selectedCodes, setSelectedCodes] = useState<string[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -48,7 +53,7 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<ItemType[]>([]);
   const [editItem, setEditItem] = useState<{ id: string; name: string; type: 'category' | 'logType' } | null>(null);
   const [newName, setNewName] = useState('');
-  const [activeTab, setActiveTab] = useState<'table' | 'logTypes' | 'categories' | 'users'>('table');
+  const [activeTab, setActiveTab] = useState<'table' | 'kbs' | 'codes' | 'logTypes' | 'categories' | 'users'>('table');
   const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -134,11 +139,16 @@ export default function AdminPage() {
       (err) => console.error('Error fetching categories:', err)
     );
 
+    const unsubscribeKBs = listenToAllKBs(setKbs);
+    const unsubscribeCodes = listenToAllCodeSnippets(setCodes);
+
     return () => {
       unsubscribeUsers();
       unsubscribeTickets();
       unsubscribeLogTypes();
       unsubscribeCategories();
+      unsubscribeKBs();
+      unsubscribeCodes();
     };
   }, []);
 
@@ -199,6 +209,38 @@ export default function AdminPage() {
       } catch (error) {
         console.error('Error deleting tickets:', error);
         alert('Failed to delete tickets.');
+      }
+    }
+  };
+
+  const handleDeleteSelectedKbs = async () => {
+    if (selectedKbs.length === 0) return alert('Please select KB entries to delete.');
+    if (window.confirm(`Delete ${selectedKbs.length} selected KB(s)?`)) {
+      try {
+        const batch = writeBatch(db);
+        selectedKbs.forEach((id) => batch.delete(doc(db, 'knowledgeBase', id)));
+        await batch.commit();
+        alert('Selected KBs deleted.');
+        setSelectedKbs([]);
+      } catch (error) {
+        console.error('Error deleting KBs:', error);
+        alert('Failed to delete KBs.');
+      }
+    }
+  };
+
+  const handleDeleteSelectedCodes = async () => {
+    if (selectedCodes.length === 0) return alert('Please select Code Snippets to delete.');
+    if (window.confirm(`Delete ${selectedCodes.length} selected Code Snippet(s)?`)) {
+      try {
+        const batch = writeBatch(db);
+        selectedCodes.forEach((id) => batch.delete(doc(db, 'codeSnippets', id)));
+        await batch.commit();
+        alert('Selected Code Snippets deleted.');
+        setSelectedCodes([]);
+      } catch (error) {
+        console.error('Error deleting Codes:', error);
+        alert('Failed to delete Codes.');
       }
     }
   };
@@ -402,6 +444,18 @@ export default function AdminPage() {
               onClick={() => setActiveTab('table')}
             >
               Tickets
+            </button>
+            <button
+              className={`btn ${activeTab === 'kbs' ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => setActiveTab('kbs')}
+            >
+              Knowledge Base
+            </button>
+            <button
+              className={`btn ${activeTab === 'codes' ? 'btn-primary' : 'btn-outline-primary'}`}
+              onClick={() => setActiveTab('codes')}
+            >
+              Code Snippets
             </button>
             <button
               className={`btn ${activeTab === 'users' ? 'btn-primary' : 'btn-outline-primary'}`}
@@ -630,6 +684,126 @@ export default function AdminPage() {
                         <a href={`/tickets/${ticket.ticketNumber}/edit`} title="Edit Ticket">
                           Edit
                         </a>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* KBs Tab */}
+        {activeTab === 'kbs' && (
+          <div className="card p-3 shadow-sm border-0 rounded-lg">
+            <h5 className="mb-2 text-gray-700">Knowledge Base Entries</h5>
+            <div className="mb-3 d-flex flex-wrap gap-2 align-items-center">
+              <button
+                className="btn btn-danger rounded-lg"
+                onClick={handleDeleteSelectedKbs}
+                disabled={selectedKbs.length === 0}
+              >
+                Delete Selected
+              </button>
+            </div>
+            <table className="ticket-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '50px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedKbs.length === kbs.length && kbs.length > 0}
+                      onChange={() => setSelectedKbs(selectedKbs.length === kbs.length ? [] : kbs.map(k => k.id))}
+                    />
+                  </th>
+                  <th>ID</th>
+                  <th>Subject</th>
+                  <th>Tags</th>
+                  <th>Last Modified</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kbs.length === 0 ? (
+                  <tr><td colSpan={6} className="text-center">No KB entries found</td></tr>
+                ) : (
+                  kbs.map((kb) => (
+                    <tr key={kb.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedKbs.includes(kb.id)}
+                          onChange={() => setSelectedKbs(prev => prev.includes(kb.id) ? prev.filter(id => id !== kb.id) : [...prev, kb.id])}
+                        />
+                      </td>
+                      <td><a href={`/kb/${kb.id}`}>{kb.id}</a></td>
+                      <td>{kb.subject}</td>
+                      <td>{kb.tags?.join(', ')}</td>
+                      <td>{kb.updatedAt ? new Date(kb.updatedAt).toLocaleString() : ''}</td>
+                      <td className="action-links">
+                        <a href={`/kb/${kb.id}`}>View</a>
+                        <a href={`/kb/${kb.id}/edit`}>Edit</a>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {/* Codes Tab */}
+        {activeTab === 'codes' && (
+          <div className="card p-3 shadow-sm border-0 rounded-lg">
+            <h5 className="mb-2 text-gray-700">Code Snippets</h5>
+            <div className="mb-3 d-flex flex-wrap gap-2 align-items-center">
+              <button
+                className="btn btn-danger rounded-lg"
+                onClick={handleDeleteSelectedCodes}
+                disabled={selectedCodes.length === 0}
+              >
+                Delete Selected
+              </button>
+            </div>
+            <table className="ticket-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '50px' }}>
+                    <input
+                      type="checkbox"
+                      checked={selectedCodes.length === codes.length && codes.length > 0}
+                      onChange={() => setSelectedCodes(selectedCodes.length === codes.length ? [] : codes.map(k => k.id))}
+                    />
+                  </th>
+                  <th>ID</th>
+                  <th>Subject</th>
+                  <th>Language</th>
+                  <th>Tags</th>
+                  <th>Last Modified</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {codes.length === 0 ? (
+                  <tr><td colSpan={7} className="text-center">No Code Snippets found</td></tr>
+                ) : (
+                  codes.map((code) => (
+                    <tr key={code.id}>
+                      <td>
+                        <input
+                          type="checkbox"
+                          checked={selectedCodes.includes(code.id)}
+                          onChange={() => setSelectedCodes(prev => prev.includes(code.id) ? prev.filter(id => id !== code.id) : [...prev, code.id])}
+                        />
+                      </td>
+                      <td><a href={`/code/${code.id}`}>{code.id}</a></td>
+                      <td>{code.subject}</td>
+                      <td><span className="badge bg-primary">{code.language}</span></td>
+                      <td>{code.tags?.join(', ')}</td>
+                      <td>{code.updatedAt ? new Date(code.updatedAt).toLocaleString() : ''}</td>
+                      <td className="action-links">
+                        <a href={`/code/${code.id}`}>View</a>
+                        <a href={`/code/${code.id}/edit`}>Edit</a>
                       </td>
                     </tr>
                   ))
